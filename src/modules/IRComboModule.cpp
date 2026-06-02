@@ -131,10 +131,20 @@ void IRComboModule::setEnabled(bool enabled) {
 }
 
 bool IRComboModule::queueAcCommand(uint8_t channel, bool power, uint16_t tempX10, uint8_t mode) {
-    if (!_enabled) return false;
+    if (!_enabled) {
+        if (channel == 1) _ac1CmdStatus = CMD_FAILED;
+        else if (channel == 2) _ac2CmdStatus = CMD_FAILED;
+        return false;
+    }
     
-    if (channel == 1 && !_ac1Enabled) return false;
-    if (channel == 2 && !_ac2Enabled) return false;
+    if (channel == 1 && !_ac1Enabled) {
+        _ac1CmdStatus = CMD_FAILED;
+        return false;
+    }
+    if (channel == 2 && !_ac2Enabled) {
+        _ac2CmdStatus = CMD_FAILED;
+        return false;
+    }
     
     if (_busy) {
         if (channel == 1) _ac1CmdStatus = CMD_BUSY;
@@ -157,7 +167,10 @@ bool IRComboModule::queueAcCommand(uint8_t channel, bool power, uint16_t tempX10
 }
 
 bool IRComboModule::queueProjectorCommand(bool power, uint16_t inputVal) {
-    if (!_enabled || !_projEnabled) return false;
+    if (!_enabled || !_projEnabled) {
+        _projCmdStatus = CMD_FAILED;
+        return false;
+    }
 
     if (_busy) {
         _projCmdStatus = CMD_BUSY;

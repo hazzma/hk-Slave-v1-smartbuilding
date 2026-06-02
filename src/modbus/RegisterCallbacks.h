@@ -23,6 +23,8 @@ public:
     static uint16_t onWriteCapability(TRegister* reg, uint16_t val);
     static uint16_t onWriteLastError(TRegister* reg, uint16_t val);
     static uint16_t onWriteRecoveryAddress(TRegister* reg, uint16_t val);
+    static uint16_t onWriteReadOnly(TRegister* reg, uint16_t val);
+    static uint16_t onWriteRelayState(TRegister* reg, uint16_t val);
     static uint16_t onWriteAcControl(TRegister* reg, uint16_t val);
     static uint16_t onWriteProjectorControl(TRegister* reg, uint16_t val);
 };
