@@ -137,7 +137,7 @@ Pin direction MAX3485 harus dikontrol firmware.
 ```cpp
 #define PIN_I2C_SDA      8
 #define PIN_I2C_SCL      7
-#define PIN_RS485_DIR    10   // MAX3485 CTRL / DE+RE
+#define PIN_RS485_DIR    2    // MAX3485 CTRL / DE+RE
 #define PIN_RS485_RX     20
 #define PIN_RS485_TX     21
 ```
@@ -1584,4 +1584,3 @@ Keputusan FSD V1:
 - IR command pakai pending flag dan command status.
 - Single command slot only.
 - Jika busy, command baru ditolak dengan status busy.
-

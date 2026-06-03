@@ -8,7 +8,7 @@
 #define PIN_I2C_SCL      7
 
 // RS485 Pins
-#define PIN_RS485_DIR    10   // MAX3485 CTRL / DE+RE (LOW = Rx, HIGH = Tx)
+#define PIN_RS485_DIR    2    // MAX3485 CTRL / DE+RE (LOW = Rx, HIGH = Tx)
 #define PIN_RS485_RX     20
 #define PIN_RS485_TX     21
 

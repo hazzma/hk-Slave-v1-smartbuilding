@@ -17,7 +17,7 @@ void ModbusSlaveServer::begin() {
     // Initialize UART1 for RS485 communication
     Serial1.begin(MODBUS_BAUDRATE, SERIAL_8N1, PIN_RS485_RX, PIN_RS485_TX);
     
-    // Pass Serial1 stream and hardware direction control pin (PIN_RS485_DIR = 10)
+    // Pass Serial1 stream and hardware direction control pin.
     _mb.begin(&Serial1, PIN_RS485_DIR);
     
     // Set Modbus slave address

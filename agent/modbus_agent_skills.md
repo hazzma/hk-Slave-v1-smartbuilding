@@ -19,7 +19,7 @@ You are the **Modbus Sub-Agent** for the `HK_Slave_V1` firmware. Your role is to
 1. **Modbus RTU Server initialization**:
    - Initialize Modbus RTU server using `emelianov/modbus-esp8266`.
    - Run on Hardware Serial, baudrate `19200`, serial format `8N1`.
-   - Control RS485 transceiver direction using `PIN_RS485_DIR` (`10`). `LOW` = Rx, `HIGH` = Tx.
+   - Control RS485 transceiver direction using `PIN_RS485_DIR` (`2`). `LOW` = Rx, `HIGH` = Tx.
 2. **Register Map**:
    - Map Modbus holding/input registers according to `RS485_Modbus_Slave_Firmware_Contract_V2.1.md`.
    - Expose identity registers (e.g. MAC address, hardware version, firmware version).
@@ -35,4 +35,3 @@ You are the **Modbus Sub-Agent** for the `HK_Slave_V1` firmware. Your role is to
 - **Fast execution**: Callbacks must return within microseconds.
 - **Read-only interface**: Interact with other layers strictly through header interfaces of the Core layer.
 - **DO NOT UPLOAD/FLASH**: Under no circumstances should you upload or flash code to the board. Only compile tests (`pio run`) are permitted.
-

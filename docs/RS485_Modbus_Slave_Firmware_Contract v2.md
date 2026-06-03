@@ -397,6 +397,7 @@ PAIRING_RX_CAPABILITY
 
 PAIRING_RX_ADDRESS
   master writes 0x0000 with new address at address 247
+  this step is only valid when exactly one unassigned slave is listening at 247
   slave validates new_address in range 2..246
   active_address = new_address
   listening_address = new_address
@@ -405,6 +406,13 @@ PAIRING_RX_ADDRESS
 NORMAL_OPERATION
   listen only on assigned address until reboot
 ```
+
+Pairing collision rule:
+
+- Master SHALL NOT send a plain `NODE_ADDRESS` write to address `247` when more than one unassigned slave may be listening at `247`.
+- If multiple unassigned slaves are present at `247`, plain pairing can assign the same address to all of them and create an address conflict.
+- Master SHALL only perform plain pairing when the installer has isolated one new slave, or when the master has otherwise proven only one unassigned slave is present.
+- Unknown-device auto pairing remains forbidden.
 
 ## Recovery Mechanism
 
@@ -437,6 +445,8 @@ Write 247:0x00F4 length 4
   0x00F6 = RECOVERY_MAC_4_5
   0x00F7 = RECOVERY_NODE_ADDRESS
 ```
+
+The recovery MAC comparison is not out-of-band. It is carried inside this Modbus write payload. All slaves at address `247` may receive the same Modbus frame; only the slave whose local MAC matches the 6 MAC bytes SHALL apply the recovery address.
 
 Recovery validation:
 
