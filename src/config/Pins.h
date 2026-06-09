@@ -36,4 +36,8 @@
 #define PIN_PRESENCE_3          PIN_PORT_3
 #define PIN_PRESENCE_4          PIN_PORT_4
 
+// Relay Profile Pin Mapping
+#define PIN_RELAY_1             PIN_PORT_0
+#define PIN_RELAY_2             PIN_PORT_1
+
 #endif // CONFIG_PINS_H

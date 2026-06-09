@@ -1,9 +1,9 @@
 #include "CapabilityManager.h"
 
 CapabilityManager::CapabilityManager(DHT22Module* dht, BH1750Module* lux, SCD30Module* co2, 
-                                     PresenceDigitalModule* presence, IRComboModule* ir)
-    : _dhtModule(dht), _luxModule(lux), _co2Module(co2), _presenceModule(presence), _irModule(ir),
-      _lastTempMask(0), _lastLuxMask(0), _lastCo2Count(0), _lastPresenceMask(0),
+                                     PresenceDigitalModule* presence, RelayModule* relay, IRComboModule* ir)
+    : _dhtModule(dht), _luxModule(lux), _co2Module(co2), _presenceModule(presence), _relayModule(relay), _irModule(ir),
+      _lastTempMask(0), _lastLuxMask(0), _lastCo2Count(0), _lastPresenceMask(0), _lastRelayMask(0),
       _lastIrProj(0), _lastIrAc1(0), _lastIrAc2(0) {}
 
 void CapabilityManager::begin() {
@@ -58,7 +58,17 @@ void CapabilityManager::update(uint32_t now_ms) {
         _presenceModule->begin();
     }
 
-    // 5. IR AC and Projector assignments
+    // 5. Relay Assignment
+    if (cap.relay_assignment_mask != _lastRelayMask) {
+        _lastRelayMask = cap.relay_assignment_mask;
+        _relayModule->setChannelAssignment(0, (cap.relay_assignment_mask & 2) != 0);
+        _relayModule->setChannelAssignment(1, (cap.relay_assignment_mask & 1) != 0);
+
+        _relayModule->setEnabled(cap.relay_assignment_mask > 0);
+        _relayModule->begin();
+    }
+
+    // 6. IR AC and Projector assignments
     if (cap.ir_projector_enable != _lastIrProj || 
         cap.ir_ac_1_enable != _lastIrAc1 || 
         cap.ir_ac_2_enable != _lastIrAc2) {

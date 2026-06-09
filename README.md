@@ -14,8 +14,9 @@ Slave ini bisa menangani beberapa capability:
 | Lux | BH1750 | I2C, address 0x23 dan 0x5C |
 | CO2 | SCD30 | I2C, address default 0x61 |
 | Presence | LD2410 digital output | Sampai 4 input digital |
-| IR AC | Panasonic AC via IR | AC 1 di GPIO 0, AC 2 di GPIO 1 |
-| IR Projector | Panasonic projector via IR | GPIO 3 dan GPIO 4 |
+| Relay | Relay lampu digital output | Relay 1 di GPIO 0, Relay 2 di GPIO 1 |
+| IR AC | Panasonic DKE via IR | AC 1 di GPIO 0, AC 2 di GPIO 1 |
+| IR Projector | EPSON HD03/HD04 via NEC IR | GPIO 3 dan GPIO 4 |
 
 Yang penting: sensor dan actuator tidak langsung aktif saat boot. Semua menunggu assignment dari master.
 
@@ -47,7 +48,7 @@ Master membaca identity, menulis assignment, lalu memberi address final. Karena 
 | --- | --- |
 | I2C SDA | GPIO 8 |
 | I2C SCL | GPIO 7 |
-| RS485 DIR / DE+RE | GPIO 10 |
+| RS485 DIR / DE+RE | GPIO 2 |
 | RS485 RX | GPIO 20 |
 | RS485 TX | GPIO 21 |
 | Universal port 0 | GPIO 0 |
@@ -70,6 +71,7 @@ GPIO `0/1/3/4` adalah port universal. Pin yang sama bisa dipakai untuk profile b
 | --- | --- | --- | --- | --- |
 | DHT22 | Temp 1 | Temp 2 | Temp 3 | Temp 4 |
 | Presence | Presence 1 | Presence 2 | Presence 3 | Presence 4 |
+| Relay | Relay 1 | Relay 2 | - | - |
 | IR Combo | AC 1 IR | AC 2 IR | Projector IR A | Projector IR B |
 
 SCD30 dan BH1750 memakai I2C di GPIO 8/7.
@@ -162,7 +164,9 @@ flowchart TD
     E -- Tidak --> I[Reject recovery]
 ```
 
-Catatan implementasi saat ini: non-matching slave mengembalikan `0` dan mengisi error `SLAVE_ERR_RECOVERY_MAC`. Pada bus yang berisi banyak slave di address 247, master tetap perlu siap menghadapi collision/response error saat proses recovery.
+Catatan implementasi saat ini: non-matching slave mengabaikan recovery request dan
+tetap berada di address `247`. Pada bus yang berisi banyak slave di address 247,
+master tetap perlu siap menghadapi collision/response error saat proses recovery.
 
 ## Register Mirror
 
@@ -333,6 +337,12 @@ Contoh:
 | `0x0205` | AC 2 mode |
 | `0x0206` | AC 1 command status |
 | `0x0207` | AC 2 command status |
+| `0x0208` | AC 1 fan speed |
+| `0x0209` | AC 1 swing vertical |
+| `0x020A` | AC 1 swing horizontal |
+| `0x020B` | AC 2 fan speed |
+| `0x020C` | AC 2 swing vertical |
+| `0x020D` | AC 2 swing horizontal |
 | `0x0210` | Projector power |
 | `0x0211` | Projector input |
 | `0x0212` | Projector command status |
@@ -347,6 +357,36 @@ Command status:
 | `3` | Failed |
 
 Untuk IR, `success` hanya berarti firmware berhasil mengirim sinyal IR. Itu bukan bukti AC atau projector benar-benar berubah state, karena IR bersifat one-way.
+
+## Alert dan Status Error
+
+Alert utama slave tersedia melalui holding/input register `LAST_ERROR` di
+`0x00F1`. Nilai ini bersifat sticky: error pertama dipertahankan sampai master
+menulis `0` ke `LAST_ERROR`, atau sampai firmware reboot. Jika penyebab error
+module masih aktif, `ErrorManager` dapat mengisi error yang sama lagi setelah clear.
+
+| Nilai | Nama | Status runtime saat ini | Pemicu |
+| --- | --- | --- | --- |
+| `0` | `SLAVE_ERR_NONE` | Aktif | Tidak ada error / clear error |
+| `1` | `SLAVE_ERR_SENSOR_TIMEOUT` | Aktif | DHT22, BH1750, SCD30, atau presence gagal membaca data |
+| `2` | `SLAVE_ERR_SENSOR_CRC` | Disiapkan | Belum dipicu oleh module saat ini |
+| `3` | `SLAVE_ERR_SENSOR_RANGE` | Disiapkan | Belum dipicu oleh module saat ini |
+| `4` | `SLAVE_ERR_CONFIG_RUNTIME` | Aktif | Relay belum assigned, module relay gagal apply state, atau config runtime gagal |
+| `5` | `SLAVE_ERR_BAD_ADDRESS` | Aktif | Master menulis node/recovery address di luar `2..246` |
+| `6` | `SLAVE_ERR_UNSUPPORTED_WRITE` | Aktif | Value/register write tidak didukung atau tidak valid |
+| `7` | `SLAVE_ERR_BUSY` | Disiapkan | Busy saat ini dilaporkan lewat command status, belum lewat `LAST_ERROR` |
+| `8` | `SLAVE_ERR_RECOVERY_MAC` | Disiapkan | Recovery MAC mismatch saat ini diabaikan sesuai contract |
+| `9` | `SLAVE_ERR_IR_COMMAND_FAILED` | Aktif | Pengiriman IR AC/projector gagal |
+
+Status command IR terpisah dari `LAST_ERROR`:
+
+| Register | Device |
+| --- | --- |
+| `0x0206` | AC 1 command status |
+| `0x0207` | AC 2 command status |
+| `0x0212` | Projector command status |
+
+Command status memakai `0=idle`, `1=success`, `2=busy`, dan `3=failed`.
 
 ## Sentinel Value
 
@@ -394,11 +434,33 @@ Unsigned sensor meliputi lux, CO2, presence, dan relay state.
 - `HIGH = presence detected`.
 - Ada debounce/stable time 500 ms sebelum cached state berubah.
 
+### Relay Lampu
+
+- Relay 1 output: GPIO 0.
+- Relay 2 output: GPIO 1.
+- Relay aktif hanya setelah `RELAY_ASSIGNMENT` dari master.
+- Output diasumsikan active HIGH: `0 = off`, `1 = on`.
+- Write ke `0x010D` mengontrol relay 1, write ke `0x010E` mengontrol relay 2.
+
 ### IR Combo
 
+- Library IR: `IRremoteESP8266` by David Conran.
+- AC memakai `IRPanasonicAc` dengan model `kPanasonicDke`.
+- Power `0/1` mengirim state OFF/ON diskret, bukan toggle.
+- Set temperature menerima `160..300` dalam Celsius x10, dengan langkah 10 atau 1°C.
+- Mode slave: `0=cool`, `1=dry`, `2=fan`, `3=heat`, `4=auto`.
+- Fan speed: `0=auto`, `1=low`, `2=medium`, `3=high`, `4=quiet`, `5=powerful`, `99=no change`.
+- Swing vertical: `0=fixed/middle`, `1=auto`, `2..6=up..down`, `7=step next`, `8=step previous`, `9/10=safe no-op`, `99=no change`.
+- Swing horizontal: `0=middle`, `1=auto`, `2..6=left..right`, `7=step next`, `8=step previous`, `9/10=safe no-op`, `99=no change`.
+- Setiap write power, temperature, mode, fan, atau swing mengirim full-state Panasonic DKE terbaru.
 - AC 1 output: GPIO 0.
 - AC 2 output: GPIO 1.
 - Projector output: GPIO 3 dan GPIO 4.
+- Driver IR hanya menginisialisasi output yang assigned; projector tidak menyentuh GPIO relay/AC 0 dan 1.
+- Projector EPSON memakai sequence NEC `0x81C00FF0` lalu `0xC1AA09F6`.
+- Sequence dikirim dua kali ke kedua output projector dengan jeda non-blocking 40 ms antar kode.
+- `PROJECTOR_POWER` menjadi trigger power toggle karena sequence ON/OFF yang tersedia sama.
+- `PROJECTOR_INPUT` ditolak sampai tersedia kode input EPSON yang sudah divalidasi.
 - Command memakai single command slot.
 - Jika sedang busy, command baru ditolak dengan status `busy`.
 - Setelah kirim IR, module cooldown sekitar 1000 ms.
@@ -416,12 +478,18 @@ Unsigned sensor meliputi lux, CO2, presence, dan relay state.
 - Recovery MAC compare sudah ada.
 - Presence debounce sudah ada.
 - Error sentinel dan not-assigned sentinel sudah dipakai.
+- Relay 1 dan Relay 2 sudah memakai driver digital output active HIGH.
+- Inisialisasi IR sudah dipisahkan per channel supaya assignment projector tidak
+  mengubah GPIO 0/1 yang sedang dipakai relay.
+- Firmware terbaru berhasil dibuild dan diflash ke ESP32-C3 melalui COM3 pada
+  6 Juni 2026.
 
 ## Yang Masih Kurang / Perlu Dibereskan
 
-- Relay belum punya module/driver. Register assignment dan state sudah ada, tetapi belum ada implementasi relay.
+- Relay perlu diuji end-to-end menggunakan beban/relay module target setelah
+  master mengirim assignment dan perintah ON/OFF.
 - Lux channel 3 dan 4 belum benar-benar bisa dipakai tanpa I2C mux atau hardware address tambahan.
-- Panasonic AC IR payload dan projector IR code masih perlu divalidasi dengan device asli.
+- Panasonic DKE tetap perlu diuji langsung ke unit AC target.
 - Behavior final saat IR command ditulis ketika module belum assigned perlu diputuskan sesuai contract.
 - Firmware version di `BuildConfig.h` adalah `1.0.0`, tetapi runtime/register memakai nilai `210` untuk contract/config v2.1.0. Ini perlu dirapikan supaya tidak membingungkan.
 - Assignment dan address belum persistent. Ini memang sesuai FSD V1, tapi berarti master wajib handle pairing/recovery setelah reboot.
@@ -451,9 +519,9 @@ pio device monitor
 Environment PlatformIO:
 
 ```ini
-[env:esp32-c3-devkitm-1]
+[env:lolin_c3_mini]
 platform = espressif32
-board = esp32-c3-devkitm-1
+board = lolin_c3_mini
 framework = arduino
 monitor_speed = 115200
 ```
@@ -466,6 +534,32 @@ Format: 8N1
 Default slave address: 247
 ```
 
+## Verifikasi Relay
+
+Relay tidak aktif hanya karena firmware selesai boot. Master harus lebih dulu
+menulis `RELAY_ASSIGNMENT`, kemudian menulis state relay.
+
+> [!WARNING]
+> Relay lampu dan IR AC memakai pin fisik yang sama: Relay 1/AC 1 di GPIO 0,
+> Relay 2/AC 2 di GPIO 1. Master tidak boleh mengaktifkan relay dan IR AC pada
+> channel yang sama. Assignment konflik atau inisialisasi IR yang salah dapat
+> mengubah output relay dan membuat lampu mati/berubah state tanpa perintah relay.
+
+```text
+RELAY_ASSIGNMENT bit 1 / value 2 = Relay 1 di GPIO 0
+RELAY_ASSIGNMENT bit 0 / value 1 = Relay 2 di GPIO 1
+
+Write 0x010D = 1 -> GPIO 0 HIGH
+Write 0x010D = 0 -> GPIO 0 LOW
+Write 0x010E = 1 -> GPIO 1 HIGH
+Write 0x010E = 0 -> GPIO 1 LOW
+```
+
+GPIO 0/1 dipakai bersama oleh profile Relay dan IR AC. Master wajib mencegah
+assignment yang konflik. Di sisi slave, IR hanya melakukan `begin()` pada
+channel IR yang benar-benar assigned sehingga projector-only tidak lagi
+menimpa output relay menjadi LOW.
+
 ## Dokumen Utama
 
 FSD lengkap ada di:
@@ -474,8 +568,8 @@ FSD lengkap ada di:
 docs/hk_slave_fsd_v_1.md
 ```
 
-Jika ada konflik antara README ini, FSD, dan contract Modbus V2.1, urutan prioritasnya:
+Jika ada konflik antara README ini, FSD, dan contract Modbus v2.2.0-draft, urutan prioritasnya:
 
 ```text
-Contract Modbus V2.1 > FSD > README
+Contract Modbus v2.2.0-draft > FSD > README
 ```

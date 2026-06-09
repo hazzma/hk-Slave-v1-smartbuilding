@@ -9,12 +9,14 @@
 #include "drivers/BH1750Driver.h"
 #include "drivers/SCD30Driver.h"
 #include "drivers/IRDriver.h"
+#include "drivers/RelayDriver.h"
 
 // Modules
 #include "modules/DHT22Module.h"
 #include "modules/BH1750Module.h"
 #include "modules/SCD30Module.h"
 #include "modules/PresenceDigitalModule.h"
+#include "modules/RelayModule.h"
 #include "modules/IRComboModule.h"
 
 // Core
@@ -31,15 +33,16 @@ DHT22Module dhtModule;
 BH1750Module luxModule;
 SCD30Module co2Module;
 PresenceDigitalModule presenceModule;
+RelayModule relayModule;
 IRComboModule irComboModule;
 
 // Instantiate managers globally
-CapabilityManager capabilityManager(&dhtModule, &luxModule, &co2Module, &presenceModule, &irComboModule);
+CapabilityManager capabilityManager(&dhtModule, &luxModule, &co2Module, &presenceModule, &relayModule, &irComboModule);
 CommandManager commandManager(&irComboModule);
-ErrorManager errorManager(&dhtModule, &luxModule, &co2Module, &presenceModule, &irComboModule);
+ErrorManager errorManager(&dhtModule, &luxModule, &co2Module, &presenceModule, &relayModule, &irComboModule);
 
 // Instantiate Modbus RTU slave server globally
-ModbusSlaveServer modbusServer(&dhtModule, &luxModule, &co2Module, &presenceModule, &irComboModule);
+ModbusSlaveServer modbusServer(&dhtModule, &luxModule, &co2Module, &presenceModule, &relayModule, &irComboModule);
 
 void setup() {
     Serial.begin(115200);
@@ -52,13 +55,14 @@ void setup() {
     // 2. Set pointers used by Modbus callbacks
     globalCapManager = &capabilityManager;
     globalCmdManager = &commandManager;
+    globalRelayModule = &relayModule;
 
     // 3. Initialize managers (synchronize initial state)
     capabilityManager.begin();
     commandManager.begin();
     errorManager.begin();
 
-    // 4. Initialize Modbus RTU server (starts Serial1 on Rx=20, Tx=21, Dir=10)
+    // 4. Initialize Modbus RTU server (starts Serial1 on Rx=20, Tx=21, Dir=2)
     modbusServer.begin();
 
     Serial.printf("Boot complete. Modbus listening on address: %d\n", runtime.getActiveAddress());
@@ -78,6 +82,7 @@ void loop() {
     luxModule.update(now);
     co2Module.update(now);
     presenceModule.update(now);
+    relayModule.update(now);
     irComboModule.update(now);
 
     // 4. Update system command manager status state maps

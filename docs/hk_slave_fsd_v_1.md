@@ -33,10 +33,10 @@ Tujuan FSD ini:
 Firmware slave harus mengikuti dokumen utama:
 
 ```text
-RS485_Modbus_Slave_Firmware_Contract_V2.1.md
+docs/RS485_Modbus_Slave_Firmware_Contract v2.md
 ```
 
-Contract V2.1 menentukan:
+Contract v2.2.0-draft menentukan:
 
 - Register map
 - Pairing address
@@ -167,6 +167,7 @@ Port `0/1/3/4` bisa dipakai untuk:
 - DHT22
 - Presence digital input
 - IR output
+- Relay output
 
 GPIO overlap diperbolehkan di level firmware config karena tidak semua module akan aktif bersamaan.
 
@@ -218,7 +219,27 @@ Satu slave bisa membaca sampai 4 DHT22 jika master mengaktifkan assignment terka
 
 Satu slave bisa membaca sampai 4 presence digital input.
 
-## 7.4 CO2 / Lux Profile
+## 7.4 Relay Profile
+
+```cpp
+#define PIN_RELAY_1            0
+#define PIN_RELAY_2            1
+```
+
+Keterangan:
+
+- Relay 1 memakai GPIO 0.
+- Relay 2 memakai GPIO 1.
+- Relay output aktif hanya setelah `RELAY_ASSIGNMENT` ditulis master.
+- Relay default saat baru assigned adalah OFF.
+- Untuk V1, relay diasumsikan active HIGH:
+
+```text
+LOW  = relay off
+HIGH = relay on
+```
+
+## 7.5 CO2 / Lux Profile
 
 CO2 SCD30 dan BH1750 memakai I2C.
 
@@ -325,16 +346,37 @@ Library:
 #include <IRsend.h>
 ```
 
+Firmware menggunakan library `IRremoteESP8266` by David Conran.
+
 Target IR:
 
-- Panasonic AC
-- Panasonic Projector
+- Panasonic AC model DKE
+- EPSON HD03 dan HD04 menggunakan protokol NEC
 
 IR communication bersifat one-way.
 
 Slave tidak bisa memastikan actual state AC/proyektor.
 
 Slave hanya bisa melaporkan apakah command IR berhasil dieksekusi oleh firmware.
+
+## 8.6 Relay
+
+Actuator:
+
+```text
+Relay lampu digital output
+```
+
+Mapping:
+
+```text
+Relay 1 = GPIO 0
+Relay 2 = GPIO 1
+```
+
+Relay communication bersifat output langsung dari GPIO.
+
+Slave hanya mengaktifkan pin relay setelah master mengaktifkan `RELAY_ASSIGNMENT`.
 
 ---
 
@@ -459,6 +501,7 @@ Contoh:
 - BH1750Module
 - SCD30Module
 - PresenceDigitalModule
+- RelayModule
 - IRComboModule
 
 ## 11.4 Driver Layer
@@ -474,6 +517,7 @@ Contoh:
 - BH1750Driver
 - SCD30Driver
 - DigitalInputDriver
+- RelayDriver
 - IRDriver
 
 ---
@@ -653,6 +697,16 @@ Slave:
 - Set pin sebagai input.
 - Baca presence secara periodik.
 
+## RELAY assignment aktif
+
+Slave:
+
+- Enable RelayModule.
+- Begin relay hanya pada channel yang assigned.
+- Set pin sebagai output.
+- Apply relay state dari register `0x010D` dan `0x010E` lewat `update()`.
+- Relay yang tidak assigned return sentinel `0xFFFE`.
+
 ## IR assignment aktif
 
 Slave:
@@ -717,6 +771,13 @@ Jika slave dipakai sebagai PRESENCE_NODE:
 
 ```text
 GPIO 0/1/3/4 = Presence input 1-4
+```
+
+Jika slave dipakai sebagai RELAY_NODE:
+
+```text
+GPIO 0 = Relay 1 output
+GPIO 1 = Relay 2 output
 ```
 
 Pin conflict dicegah oleh master profile policy dan lazy initialization di slave.
@@ -907,6 +968,111 @@ Untuk V1 bisa mulai dari:
 500 ms stable time
 ```
 
+# 22A. Relay Module Specification
+
+## 22A.1 Purpose
+
+RelayModule mengontrol relay lampu digital output.
+
+## 22A.2 Pins
+
+Relay memakai:
+
+```text
+Relay 1 = GPIO 0
+Relay 2 = GPIO 1
+```
+
+## 22A.3 Init Rule
+
+Relay hanya di-init jika `RELAY_ASSIGNMENT` aktif.
+
+Mapping assignment mengikuti contract:
+
+```text
+Bit 1 value 2 = Relay 1
+Bit 0 value 1 = Relay 2
+0              = relay disabled
+```
+
+## 22A.4 Logic
+
+Untuk V1:
+
+```text
+0 = relay off
+1 = relay on
+```
+
+Output GPIO diasumsikan active HIGH:
+
+```text
+LOW  = relay off
+HIGH = relay on
+```
+
+## 22A.5 Register
+
+```text
+0x0014 RELAY_ASSIGNMENT
+0x010D RELAY_1_STATE
+0x010E RELAY_2_STATE
+```
+
+## 22A.6 Update Rule
+
+Modbus callback tidak boleh langsung `digitalWrite()`.
+
+Flow:
+
+```text
+Master write relay state register
+→
+Register callback validasi ringan
+→
+RelayModule set desired state
+→
+RelayModule.update()
+→
+digitalWrite ke GPIO relay assigned
+→
+Register mirror update
+```
+
+## 22A.7 Error / Sentinel
+
+Jika relay belum assigned:
+
+```text
+return 0xFFFE
+```
+
+Jika master menulis value selain `0` atau `1`:
+
+```text
+reject value
+set last_error = SLAVE_ERR_UNSUPPORTED_WRITE
+```
+
+Jika master menulis relay yang belum assigned:
+
+```text
+return 0xFFFE
+set last_error = SLAVE_ERR_CONFIG_RUNTIME
+```
+
+## 22A.8 Perlindungan dari Konflik IR
+
+GPIO 0 dan GPIO 1 juga merupakan output IR AC 1 dan AC 2. Karena itu:
+
+- Master wajib mencegah profile Relay dan IR AC memakai channel GPIO yang sama.
+- `IRDriver::begin()` hanya boleh dipanggil untuk channel IR yang assigned.
+- Assignment projector-only tidak boleh menginisialisasi atau mengubah GPIO 0/1.
+- Relay yang assigned harus mempertahankan state HIGH/LOW sampai ada write relay
+  berikutnya atau assignment berubah.
+
+Rule ini mencegah inisialisasi IR mengubah output relay menjadi LOW.
+
 ---
 
 # 23. IR Combo Module Specification
@@ -926,11 +1092,13 @@ IRComboModule mengirim IR command untuk:
 #include <IRsend.h>
 ```
 
+Library IR yang digunakan adalah `IRremoteESP8266` by David Conran.
+
 ## 23.3 Target Device
 
 ```text
-AC: Panasonic
-Projector: Panasonic
+AC: Panasonic DKE (`kPanasonicDke`)
+Projector: EPSON HD03 dan HD04
 ```
 
 ## 23.4 Output Pins
@@ -945,6 +1113,24 @@ Projector command dikirim ke GPIO 3 dan GPIO 4 secara bersamaan atau berurutan s
 
 Dari sudut pandang master, projector tetap satu device.
 
+IR driver hanya boleh melakukan `begin()` pada channel yang di-assign. Assignment
+projector tidak boleh menginisialisasi atau mengubah GPIO 0 dan GPIO 1 karena
+pin tersebut juga dipakai oleh profile relay.
+
+Sequence power toggle projector yang sudah diuji:
+
+```cpp
+uint32_t irCode1 = 0x81C00FF0;
+uint32_t irCode2 = 0xC1AA09F6;
+```
+
+Firmware mengirim `irCode1`, memberi jeda non-blocking 40 ms, lalu mengirim `irCode2`.
+Sequence lengkap tersebut dikirim dua kali ke output GPIO 3 dan GPIO 4.
+Karena sequence ON dan OFF sama, write `PROJECTOR_POWER` diperlakukan sebagai
+trigger power toggle; nilai register tidak memilih kode ON/OFF yang berbeda.
+Write `PROJECTOR_INPUT` ditolak dengan `SLAVE_ERR_UNSUPPORTED_WRITE` sampai
+tersedia kode input EPSON yang sudah divalidasi.
+
 ## 23.5 Related Registers
 
 AC 1:
@@ -954,6 +1140,9 @@ AC 1:
 0x0201 AC_1_SET_TEMP
 0x0202 AC_1_MODE
 0x0206 AC_1_COMMAND_STATUS
+0x0208 AC_1_FAN_SPEED
+0x0209 AC_1_SWING_VERTICAL
+0x020A AC_1_SWING_HORIZONTAL
 ```
 
 AC 2:
@@ -963,6 +1152,33 @@ AC 2:
 0x0204 AC_2_SET_TEMP
 0x0205 AC_2_MODE
 0x0207 AC_2_COMMAND_STATUS
+0x020B AC_2_FAN_SPEED
+0x020C AC_2_SWING_VERTICAL
+0x020D AC_2_SWING_HORIZONTAL
+```
+
+Rule AC Panasonic DKE:
+
+```text
+AC_x_POWER    = 0 off, 1 on
+AC_x_SET_TEMP = 160..300 Celsius x10, langkah 10
+AC_x_MODE     = 0 cool, 1 dry, 2 fan, 3 heat, 4 auto
+AC_x_FAN_SPEED = 0 auto, 1 low, 2 medium, 3 high, 4 quiet, 5 powerful, 99 no change
+AC_x_SWING_VERTICAL = 0 fixed/middle, 1 auto, 2..6 up..down, 7 step next, 8 step previous, 9/10 safe no-op, 99 no change
+AC_x_SWING_HORIZONTAL = 0 middle, 1 auto, 2..6 left..right, 7 step next, 8 step previous, 9/10 safe no-op, 99 no change
+```
+
+Firmware menggunakan `IRPanasonicAc`, mengunci model ke `kPanasonicDke`, lalu
+mengirim full-state terbaru setiap power, temperature, mode, fan, atau swing berubah.
+Model DKE mendukung perintah power ON/OFF diskret. Perubahan temperature
+mempertahankan nilai power, mode, fan, dan swing yang sedang tersimpan di register.
+
+Set temperature Modbus memakai Celsius x10:
+
+```text
+160 = 16 derajat Celsius
+240 = 24 derajat Celsius
+300 = 30 derajat Celsius
 ```
 
 Projector:
@@ -1465,6 +1681,8 @@ src/
     SCD30Module.cpp
     PresenceDigitalModule.h
     PresenceDigitalModule.cpp
+    RelayModule.h
+    RelayModule.cpp
     IRComboModule.h
     IRComboModule.cpp
 
@@ -1477,6 +1695,8 @@ src/
     SCD30Driver.cpp
     DigitalInputDriver.h
     DigitalInputDriver.cpp
+    RelayDriver.h
+    RelayDriver.cpp
     IRDriver.h
     IRDriver.cpp
 ```
@@ -1547,8 +1767,7 @@ onWriteAcPower(value) {
 
 Open items untuk versi berikutnya:
 
-- Final Panasonic AC IR code details.
-- Final Panasonic projector IR code details.
+- Validasi Panasonic DKE langsung ke unit AC target.
 - Apakah DHT22 humidity akan dipakai di versi berikutnya.
 - Apakah perlu I2CBusManager jika firmware berkembang.
 - Apakah perlu FreeRTOS jika module bertambah.
@@ -1556,7 +1775,26 @@ Open items untuk versi berikutnya:
 
 ---
 
-# 38. Final Decision Summary
+# 38. Status Implementasi dan Verifikasi Terbaru
+
+Status per 6 Juni 2026:
+
+- Relay 1 GPIO 0 dan Relay 2 GPIO 1 telah diimplementasikan sebagai output
+  active HIGH melalui `RelayModule` dan `RelayDriver`.
+- Write `0x010D` dan `0x010E` diterapkan secara non-blocking melalui
+  `RelayModule::update()`.
+- IR AC memakai Panasonic DKE melalui `IRPanasonicAc`.
+- IR projector EPSON HD03/HD04 memakai dua kode NEC `0x81C00FF0` dan
+  `0xC1AA09F6`.
+- Inisialisasi IR dilakukan selektif per channel untuk mencegah projector-only
+  menimpa GPIO relay 0/1.
+- Firmware slave berhasil dibuild dan diflash ke ESP32-C3 melalui COM3.
+- Verifikasi tegangan HIGH/LOW dan beban relay tetap harus dilakukan pada
+  hardware target setelah master memberikan assignment relay.
+
+---
+
+# 39. Final Decision Summary
 
 Keputusan FSD V1:
 
@@ -1568,6 +1806,8 @@ Keputusan FSD V1:
 - GPIO 0/1/3/4 adalah universal port.
 - DHT22 bisa sampai 4 channel di GPIO 0/1/3/4.
 - Presence bisa sampai 4 input di GPIO 0/1/3/4.
+- Relay 1 output di GPIO 0.
+- Relay 2 output di GPIO 1.
 - AC 1 IR output di GPIO 0.
 - AC 2 IR output di GPIO 1.
 - Projector IR output di GPIO 3 dan GPIO 4 bersamaan.
@@ -1576,6 +1816,7 @@ Keputusan FSD V1:
 - CO2 memakai SCD30 I2C.
 - Lux memakai BH1750 I2C.
 - Presence LD2410 pakai digital high/low.
+- Relay lampu memakai digital output active HIGH.
 - IR memakai IRremoteESP8266.
 - Tidak pakai RTOS untuk V1.
 - Pakai millis scheduler.

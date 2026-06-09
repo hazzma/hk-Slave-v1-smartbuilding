@@ -7,6 +7,7 @@
 #include "../modules/BH1750Module.h"
 #include "../modules/SCD30Module.h"
 #include "../modules/PresenceDigitalModule.h"
+#include "../modules/RelayModule.h"
 #include "../modules/IRComboModule.h"
 
 // System Error codes from contract
@@ -27,11 +28,12 @@ private:
     BH1750Module* _luxModule;
     SCD30Module* _co2Module;
     PresenceDigitalModule* _presenceModule;
+    RelayModule* _relayModule;
     IRComboModule* _irModule;
 
 public:
     ErrorManager(DHT22Module* dht, BH1750Module* lux, SCD30Module* co2, 
-                 PresenceDigitalModule* presence, IRComboModule* ir);
+                 PresenceDigitalModule* presence, RelayModule* relay, IRComboModule* ir);
 
     void begin();
     

@@ -17,7 +17,8 @@ public:
     /**
      * @brief Handle AC command request coming from Modbus writes.
      */
-    bool handleAcWrite(uint8_t channel, bool power, uint16_t tempX10, uint8_t mode);
+    bool handleAcWrite(uint8_t channel, bool power, uint16_t tempX10, uint8_t mode,
+                       uint8_t fanSpeed, uint8_t swingVertical, uint8_t swingHorizontal);
 
     /**
      * @brief Handle Projector command request coming from Modbus writes.

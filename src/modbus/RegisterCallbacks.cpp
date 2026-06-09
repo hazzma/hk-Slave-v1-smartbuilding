@@ -5,6 +5,7 @@
 // Define pointer handles to core managers
 CapabilityManager* globalCapManager = nullptr;
 CommandManager* globalCmdManager = nullptr;
+RelayModule* globalRelayModule = nullptr;
 
 void RegisterCallbacks::setupCallbacks(ModbusRTU& mb) {
     // 1. Identity write callback (Address shifting)
@@ -40,9 +41,15 @@ void RegisterCallbacks::setupCallbacks(ModbusRTU& mb) {
     mb.onSet(HREG(REG_AC_1_POWER), onWriteAcControl);
     mb.onSet(HREG(REG_AC_1_SET_TEMP), onWriteAcControl);
     mb.onSet(HREG(REG_AC_1_MODE), onWriteAcControl);
+    mb.onSet(HREG(REG_AC_1_FAN_SPEED), onWriteAcControl);
+    mb.onSet(HREG(REG_AC_1_SWING_VERTICAL), onWriteAcControl);
+    mb.onSet(HREG(REG_AC_1_SWING_HORIZONTAL), onWriteAcControl);
     mb.onSet(HREG(REG_AC_2_POWER), onWriteAcControl);
     mb.onSet(HREG(REG_AC_2_SET_TEMP), onWriteAcControl);
     mb.onSet(HREG(REG_AC_2_MODE), onWriteAcControl);
+    mb.onSet(HREG(REG_AC_2_FAN_SPEED), onWriteAcControl);
+    mb.onSet(HREG(REG_AC_2_SWING_VERTICAL), onWriteAcControl);
+    mb.onSet(HREG(REG_AC_2_SWING_HORIZONTAL), onWriteAcControl);
 
     // 6. Projector Control write callbacks
     mb.onSet(HREG(REG_PROJECTOR_POWER), onWriteProjectorControl);
@@ -198,6 +205,10 @@ uint16_t RegisterCallbacks::onWriteCapability(TRegister* reg, uint16_t val) {
                 return cap.relay_assignment_mask;
             }
             cap.relay_assignment_mask = val;
+            if (globalRelayModule != nullptr) {
+                globalRelayModule->setChannelAssignment(0, (val & 2) != 0);
+                globalRelayModule->setChannelAssignment(1, (val & 1) != 0);
+            }
             runtime.getState().relay_state[0] = (val & 2) ? 0 : 0xFFFE;
             runtime.getState().relay_state[1] = (val & 1) ? 0 : 0xFFFE;
             break;
@@ -309,9 +320,13 @@ uint16_t RegisterCallbacks::onWriteRelayState(TRegister* reg, uint16_t val) {
     }
 
     if (reg->address.address == REG_RELAY_1_STATE) {
-        if ((cap.relay_assignment_mask & 2) == 0) {
+        if ((cap.relay_assignment_mask & 2) == 0 || globalRelayModule == nullptr) {
             runtime.setLastError(SLAVE_ERR_CONFIG_RUNTIME);
             state.relay_state[0] = 0xFFFE;
+            return state.relay_state[0];
+        }
+        if (!globalRelayModule->setRelayState(0, val > 0)) {
+            runtime.setLastError(SLAVE_ERR_CONFIG_RUNTIME);
             return state.relay_state[0];
         }
         state.relay_state[0] = val;
@@ -319,9 +334,13 @@ uint16_t RegisterCallbacks::onWriteRelayState(TRegister* reg, uint16_t val) {
     }
 
     if (reg->address.address == REG_RELAY_2_STATE) {
-        if ((cap.relay_assignment_mask & 1) == 0) {
+        if ((cap.relay_assignment_mask & 1) == 0 || globalRelayModule == nullptr) {
             runtime.setLastError(SLAVE_ERR_CONFIG_RUNTIME);
             state.relay_state[1] = 0xFFFE;
+            return state.relay_state[1];
+        }
+        if (!globalRelayModule->setRelayState(1, val > 0)) {
+            runtime.setLastError(SLAVE_ERR_CONFIG_RUNTIME);
             return state.relay_state[1];
         }
         state.relay_state[1] = val;
@@ -332,13 +351,68 @@ uint16_t RegisterCallbacks::onWriteRelayState(TRegister* reg, uint16_t val) {
     return 0;
 }
 
+static bool isAc1ControlRegister(uint16_t address) {
+    return address == REG_AC_1_POWER ||
+           address == REG_AC_1_SET_TEMP ||
+           address == REG_AC_1_MODE ||
+           address == REG_AC_1_FAN_SPEED ||
+           address == REG_AC_1_SWING_VERTICAL ||
+           address == REG_AC_1_SWING_HORIZONTAL;
+}
+
+static bool isAc2ControlRegister(uint16_t address) {
+    return address == REG_AC_2_POWER ||
+           address == REG_AC_2_SET_TEMP ||
+           address == REG_AC_2_MODE ||
+           address == REG_AC_2_FAN_SPEED ||
+           address == REG_AC_2_SWING_VERTICAL ||
+           address == REG_AC_2_SWING_HORIZONTAL;
+}
+
+static bool isSupportedAcFan(uint16_t value) {
+    return value <= 5 || value == 99;
+}
+
+static bool isSupportedAcSwing(uint16_t value) {
+    return value <= 10 || value == 99;
+}
+
 uint16_t RegisterCallbacks::onWriteAcControl(TRegister* reg, uint16_t val) {
     if (globalCmdManager == nullptr) return val;
 
     // Determine target channel (1 or 2)
-    uint8_t channel = (reg->address.address <= REG_AC_1_MODE) ? 1 : 2;
+    uint16_t address = reg->address.address;
+    uint8_t channel = isAc1ControlRegister(address) ? 1 : 2;
 
-    if ((reg->address.address == REG_AC_1_POWER || reg->address.address == REG_AC_2_POWER) && val > 1) {
+    if (!isAc1ControlRegister(address) && !isAc2ControlRegister(address)) {
+        runtime.setLastError(SLAVE_ERR_UNSUPPORTED_WRITE);
+        return reg->value;
+    }
+
+    if ((address == REG_AC_1_POWER || address == REG_AC_2_POWER) && val > 1) {
+        runtime.setLastError(SLAVE_ERR_UNSUPPORTED_WRITE);
+        return reg->value;
+    }
+
+    if ((address == REG_AC_1_SET_TEMP || address == REG_AC_2_SET_TEMP) &&
+        (val < 160 || val > 300 || val % 10 != 0)) {
+        runtime.setLastError(SLAVE_ERR_UNSUPPORTED_WRITE);
+        return reg->value;
+    }
+
+    if ((address == REG_AC_1_MODE || address == REG_AC_2_MODE) && val > 4) {
+        runtime.setLastError(SLAVE_ERR_UNSUPPORTED_WRITE);
+        return reg->value;
+    }
+
+    if ((address == REG_AC_1_FAN_SPEED || address == REG_AC_2_FAN_SPEED) && !isSupportedAcFan(val)) {
+        runtime.setLastError(SLAVE_ERR_UNSUPPORTED_WRITE);
+        return reg->value;
+    }
+
+    if ((address == REG_AC_1_SWING_VERTICAL || address == REG_AC_1_SWING_HORIZONTAL ||
+         address == REG_AC_2_SWING_VERTICAL || address == REG_AC_2_SWING_HORIZONTAL) &&
+        !isSupportedAcSwing(val)) {
         runtime.setLastError(SLAVE_ERR_UNSUPPORTED_WRITE);
         return reg->value;
     }
@@ -349,18 +423,31 @@ uint16_t RegisterCallbacks::onWriteAcControl(TRegister* reg, uint16_t val) {
     uint16_t powerVal = 0;
     uint16_t tempVal = 0;
     uint16_t modeVal = 0;
+    uint16_t fanVal = 99;
+    uint16_t swingVVal = 99;
+    uint16_t swingHVal = 99;
 
     if (channel == 1) {
-        powerVal = (reg->address.address == REG_AC_1_POWER) ? val : globalMbInstance->Hreg(REG_AC_1_POWER);
-        tempVal  = (reg->address.address == REG_AC_1_SET_TEMP) ? val : globalMbInstance->Hreg(REG_AC_1_SET_TEMP);
-        modeVal  = (reg->address.address == REG_AC_1_MODE) ? val : globalMbInstance->Hreg(REG_AC_1_MODE);
+        powerVal = (address == REG_AC_1_POWER) ? val : globalMbInstance->Hreg(REG_AC_1_POWER);
+        tempVal  = (address == REG_AC_1_SET_TEMP) ? val : globalMbInstance->Hreg(REG_AC_1_SET_TEMP);
+        modeVal  = (address == REG_AC_1_MODE) ? val : globalMbInstance->Hreg(REG_AC_1_MODE);
+        fanVal = (address == REG_AC_1_FAN_SPEED) ? val : globalMbInstance->Hreg(REG_AC_1_FAN_SPEED);
+        swingVVal = (address == REG_AC_1_SWING_VERTICAL) ? val : globalMbInstance->Hreg(REG_AC_1_SWING_VERTICAL);
+        swingHVal = (address == REG_AC_1_SWING_HORIZONTAL) ? val : globalMbInstance->Hreg(REG_AC_1_SWING_HORIZONTAL);
     } else {
-        powerVal = (reg->address.address == REG_AC_2_POWER) ? val : globalMbInstance->Hreg(REG_AC_2_POWER);
-        tempVal  = (reg->address.address == REG_AC_2_SET_TEMP) ? val : globalMbInstance->Hreg(REG_AC_2_SET_TEMP);
-        modeVal  = (reg->address.address == REG_AC_2_MODE) ? val : globalMbInstance->Hreg(REG_AC_2_MODE);
+        powerVal = (address == REG_AC_2_POWER) ? val : globalMbInstance->Hreg(REG_AC_2_POWER);
+        tempVal  = (address == REG_AC_2_SET_TEMP) ? val : globalMbInstance->Hreg(REG_AC_2_SET_TEMP);
+        modeVal  = (address == REG_AC_2_MODE) ? val : globalMbInstance->Hreg(REG_AC_2_MODE);
+        fanVal = (address == REG_AC_2_FAN_SPEED) ? val : globalMbInstance->Hreg(REG_AC_2_FAN_SPEED);
+        swingVVal = (address == REG_AC_2_SWING_VERTICAL) ? val : globalMbInstance->Hreg(REG_AC_2_SWING_VERTICAL);
+        swingHVal = (address == REG_AC_2_SWING_HORIZONTAL) ? val : globalMbInstance->Hreg(REG_AC_2_SWING_HORIZONTAL);
     }
 
-    bool queued = globalCmdManager->handleAcWrite(channel, powerVal > 0, tempVal, modeVal);
+    bool queued = globalCmdManager->handleAcWrite(channel, powerVal > 0, tempVal,
+                                                  static_cast<uint8_t>(modeVal),
+                                                  static_cast<uint8_t>(fanVal),
+                                                  static_cast<uint8_t>(swingVVal),
+                                                  static_cast<uint8_t>(swingHVal));
     if (!queued && channel == 1 && runtime.getState().ac_1_command_status != CMD_BUSY) {
         runtime.getState().ac_1_command_status = CMD_FAILED;
     } else if (!queued && channel == 2 && runtime.getState().ac_2_command_status != CMD_BUSY) {
@@ -373,18 +460,17 @@ uint16_t RegisterCallbacks::onWriteAcControl(TRegister* reg, uint16_t val) {
 uint16_t RegisterCallbacks::onWriteProjectorControl(TRegister* reg, uint16_t val) {
     if (globalCmdManager == nullptr) return val;
 
-    if (reg->address.address == REG_PROJECTOR_POWER && val > 1) {
+    if (reg->address.address == REG_PROJECTOR_INPUT) {
         runtime.setLastError(SLAVE_ERR_UNSUPPORTED_WRITE);
         return reg->value;
     }
 
-    extern ModbusRTU* globalMbInstance;
-    if (globalMbInstance == nullptr) return val;
+    if (val > 1) {
+        runtime.setLastError(SLAVE_ERR_UNSUPPORTED_WRITE);
+        return reg->value;
+    }
 
-    uint16_t powerVal = (reg->address.address == REG_PROJECTOR_POWER) ? val : globalMbInstance->Hreg(REG_PROJECTOR_POWER);
-    uint16_t inputVal = (reg->address.address == REG_PROJECTOR_INPUT) ? val : globalMbInstance->Hreg(REG_PROJECTOR_INPUT);
-
-    bool queued = globalCmdManager->handleProjectorWrite(powerVal > 0, inputVal);
+    bool queued = globalCmdManager->handleProjectorWrite(val > 0, 0);
     if (!queued && runtime.getState().projector_command_status != CMD_BUSY) {
         runtime.getState().projector_command_status = CMD_FAILED;
     }

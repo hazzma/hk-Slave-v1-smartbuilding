@@ -10,6 +10,7 @@
 #include "../modules/BH1750Module.h"
 #include "../modules/SCD30Module.h"
 #include "../modules/PresenceDigitalModule.h"
+#include "../modules/RelayModule.h"
 #include "../modules/IRComboModule.h"
 
 class RegisterBank {
@@ -20,11 +21,12 @@ private:
     BH1750Module* _lux;
     SCD30Module* _co2;
     PresenceDigitalModule* _presence;
+    RelayModule* _relay;
     IRComboModule* _ir;
 
 public:
     RegisterBank(ModbusRTU& mb, DHT22Module* dht, BH1750Module* lux, SCD30Module* co2, 
-                 PresenceDigitalModule* presence, IRComboModule* ir);
+                 PresenceDigitalModule* presence, RelayModule* relay, IRComboModule* ir);
 
     /**
      * @brief Setup and declare all Modbus holding registers in the ModbusRTU instance.

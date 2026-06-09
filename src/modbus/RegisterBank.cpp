@@ -2,8 +2,8 @@
 #include "../config/RegisterMap.h"
 
 RegisterBank::RegisterBank(ModbusRTU& mb, DHT22Module* dht, BH1750Module* lux, SCD30Module* co2, 
-                           PresenceDigitalModule* presence, IRComboModule* ir)
-    : _mb(mb), _dht(dht), _lux(lux), _co2(co2), _presence(presence), _ir(ir) {}
+                           PresenceDigitalModule* presence, RelayModule* relay, IRComboModule* ir)
+    : _mb(mb), _dht(dht), _lux(lux), _co2(co2), _presence(presence), _relay(relay), _ir(ir) {}
 
 void RegisterBank::initRegisters() {
     // Coils are a separate Modbus address space. The contract requires FC01
@@ -57,7 +57,7 @@ void RegisterBank::initRegisters() {
     _mb.addHreg(REG_PRESENCE_2_STATE, 0xFFFE);
     _mb.addHreg(REG_PRESENCE_3_STATE, 0xFFFE);
     _mb.addHreg(REG_PRESENCE_4_STATE, 0xFFFE);
-    _mb.addHreg(REG_RELAY_1_STATE, 0xFFFE); // Relays not actively managed in FSD V1, keep unassigned
+    _mb.addHreg(REG_RELAY_1_STATE, 0xFFFE);
     _mb.addHreg(REG_RELAY_2_STATE, 0xFFFE);
 
     // AC & Projector Control registers
@@ -69,6 +69,12 @@ void RegisterBank::initRegisters() {
     _mb.addHreg(REG_AC_2_MODE, 0);
     _mb.addHreg(REG_AC_1_COMMAND_STATUS, CMD_IDLE);
     _mb.addHreg(REG_AC_2_COMMAND_STATUS, CMD_IDLE);
+    _mb.addHreg(REG_AC_1_FAN_SPEED, 99);
+    _mb.addHreg(REG_AC_1_SWING_VERTICAL, 99);
+    _mb.addHreg(REG_AC_1_SWING_HORIZONTAL, 99);
+    _mb.addHreg(REG_AC_2_FAN_SPEED, 99);
+    _mb.addHreg(REG_AC_2_SWING_VERTICAL, 99);
+    _mb.addHreg(REG_AC_2_SWING_HORIZONTAL, 99);
     
     _mb.addHreg(REG_PROJECTOR_POWER, 0);
     _mb.addHreg(REG_PROJECTOR_INPUT, 0);
@@ -112,8 +118,20 @@ void RegisterBank::initRegisters() {
     _mb.addIreg(REG_RELAY_1_STATE, 0xFFFE);
     _mb.addIreg(REG_RELAY_2_STATE, 0xFFFE);
 
+    _mb.addIreg(REG_AC_1_POWER, 0);
+    _mb.addIreg(REG_AC_1_SET_TEMP, 240);
+    _mb.addIreg(REG_AC_1_MODE, 0);
+    _mb.addIreg(REG_AC_2_POWER, 0);
+    _mb.addIreg(REG_AC_2_SET_TEMP, 240);
+    _mb.addIreg(REG_AC_2_MODE, 0);
     _mb.addIreg(REG_AC_1_COMMAND_STATUS, CMD_IDLE);
     _mb.addIreg(REG_AC_2_COMMAND_STATUS, CMD_IDLE);
+    _mb.addIreg(REG_AC_1_FAN_SPEED, 99);
+    _mb.addIreg(REG_AC_1_SWING_VERTICAL, 99);
+    _mb.addIreg(REG_AC_1_SWING_HORIZONTAL, 99);
+    _mb.addIreg(REG_AC_2_FAN_SPEED, 99);
+    _mb.addIreg(REG_AC_2_SWING_VERTICAL, 99);
+    _mb.addIreg(REG_AC_2_SWING_HORIZONTAL, 99);
     _mb.addIreg(REG_PROJECTOR_COMMAND_STATUS, CMD_IDLE);
 }
 
@@ -199,6 +217,11 @@ void RegisterBank::update(uint32_t now_ms) {
         _mb.Ireg(REG_PRESENCE_4_STATE, _presence->getPresenceState(3));
     }
 
+    if (_relay != nullptr) {
+        state.relay_state[0] = _relay->getRelayState(0);
+        state.relay_state[1] = _relay->getRelayState(1);
+    }
+
     _mb.Hreg(REG_RELAY_1_STATE, state.relay_state[0]);
     _mb.Hreg(REG_RELAY_2_STATE, state.relay_state[1]);
     _mb.Ireg(REG_RELAY_1_STATE, state.relay_state[0]);
@@ -206,7 +229,19 @@ void RegisterBank::update(uint32_t now_ms) {
     _mb.Coil(REG_RELAY_1_STATE, state.relay_state[0] == 1);
     _mb.Coil(REG_RELAY_2_STATE, state.relay_state[1] == 1);
 
-    // 7. Sync Command Statuses
+    // 7. Sync Command Statuses and FC04 mirrors for control registers
+    _mb.Ireg(REG_AC_1_POWER, _mb.Hreg(REG_AC_1_POWER));
+    _mb.Ireg(REG_AC_1_SET_TEMP, _mb.Hreg(REG_AC_1_SET_TEMP));
+    _mb.Ireg(REG_AC_1_MODE, _mb.Hreg(REG_AC_1_MODE));
+    _mb.Ireg(REG_AC_2_POWER, _mb.Hreg(REG_AC_2_POWER));
+    _mb.Ireg(REG_AC_2_SET_TEMP, _mb.Hreg(REG_AC_2_SET_TEMP));
+    _mb.Ireg(REG_AC_2_MODE, _mb.Hreg(REG_AC_2_MODE));
+    _mb.Ireg(REG_AC_1_FAN_SPEED, _mb.Hreg(REG_AC_1_FAN_SPEED));
+    _mb.Ireg(REG_AC_1_SWING_VERTICAL, _mb.Hreg(REG_AC_1_SWING_VERTICAL));
+    _mb.Ireg(REG_AC_1_SWING_HORIZONTAL, _mb.Hreg(REG_AC_1_SWING_HORIZONTAL));
+    _mb.Ireg(REG_AC_2_FAN_SPEED, _mb.Hreg(REG_AC_2_FAN_SPEED));
+    _mb.Ireg(REG_AC_2_SWING_VERTICAL, _mb.Hreg(REG_AC_2_SWING_VERTICAL));
+    _mb.Ireg(REG_AC_2_SWING_HORIZONTAL, _mb.Hreg(REG_AC_2_SWING_HORIZONTAL));
     _mb.Hreg(REG_AC_1_COMMAND_STATUS, state.ac_1_command_status);
     _mb.Hreg(REG_AC_2_COMMAND_STATUS, state.ac_2_command_status);
     _mb.Hreg(REG_PROJECTOR_COMMAND_STATUS, state.projector_command_status);

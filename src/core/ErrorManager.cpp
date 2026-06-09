@@ -1,8 +1,8 @@
 #include "ErrorManager.h"
 
 ErrorManager::ErrorManager(DHT22Module* dht, BH1750Module* lux, SCD30Module* co2, 
-                           PresenceDigitalModule* presence, IRComboModule* ir)
-    : _dhtModule(dht), _luxModule(lux), _co2Module(co2), _presenceModule(presence), _irModule(ir) {}
+                           PresenceDigitalModule* presence, RelayModule* relay, IRComboModule* ir)
+    : _dhtModule(dht), _luxModule(lux), _co2Module(co2), _presenceModule(presence), _relayModule(relay), _irModule(ir) {}
 
 void ErrorManager::begin() {
     clearError();
@@ -41,6 +41,11 @@ void ErrorManager::update(uint32_t now_ms) {
 
     if (_presenceModule != nullptr && _presenceModule->isEnabled() && _presenceModule->getStatus() == MODULE_ERROR) {
         runtime.setLastError(_presenceModule->getLastError());
+        return;
+    }
+
+    if (_relayModule != nullptr && _relayModule->isEnabled() && _relayModule->getStatus() == MODULE_ERROR) {
+        runtime.setLastError(_relayModule->getLastError());
         return;
     }
 

@@ -54,6 +54,12 @@
 #define REG_AC_2_MODE                 0x0205
 #define REG_AC_1_COMMAND_STATUS       0x0206
 #define REG_AC_2_COMMAND_STATUS       0x0207
+#define REG_AC_1_FAN_SPEED            0x0208
+#define REG_AC_1_SWING_VERTICAL       0x0209
+#define REG_AC_1_SWING_HORIZONTAL     0x020A
+#define REG_AC_2_FAN_SPEED            0x020B
+#define REG_AC_2_SWING_VERTICAL       0x020C
+#define REG_AC_2_SWING_HORIZONTAL     0x020D
 #define REG_PROJECTOR_POWER           0x0210
 #define REG_PROJECTOR_INPUT           0x0211
 #define REG_PROJECTOR_COMMAND_STATUS  0x0212

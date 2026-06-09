@@ -6,10 +6,12 @@
 #include "../core/SlaveRuntime.h"
 #include "../core/CapabilityManager.h"
 #include "../core/CommandManager.h"
+#include "../modules/RelayModule.h"
 
 // Define pointer handles to core managers for use inside static callback scopes
 extern CapabilityManager* globalCapManager;
 extern CommandManager* globalCmdManager;
+extern RelayModule* globalRelayModule;
 
 class RegisterCallbacks {
 public:

@@ -19,7 +19,7 @@ private:
 
 public:
     ModbusSlaveServer(DHT22Module* dht, BH1750Module* lux, SCD30Module* co2, 
-                      PresenceDigitalModule* presence, IRComboModule* ir);
+                      PresenceDigitalModule* presence, RelayModule* relay, IRComboModule* ir);
     
     void begin();
     

@@ -5,10 +5,10 @@
 // Define the global ModbusRTU pointer
 ModbusRTU* globalMbInstance = nullptr;
 
-ModbusSlaveServer::ModbusSlaveServer(DHT22Module* dht, BH1750Module* lux, SCD30Module* co2, 
-                                     PresenceDigitalModule* presence, IRComboModule* ir)
-    : _registerBank(_mb, dht, lux, co2, presence, ir), 
-      _activeAddress(DEFAULT_MODBUS_ADDRESS), 
+ModbusSlaveServer::ModbusSlaveServer(DHT22Module* dht, BH1750Module* lux, SCD30Module* co2,
+                                     PresenceDigitalModule* presence, RelayModule* relay, IRComboModule* ir)
+    : _registerBank(_mb, dht, lux, co2, presence, relay, ir),
+      _activeAddress(DEFAULT_MODBUS_ADDRESS),
       _initialized(false) {}
 
 void ModbusSlaveServer::begin() {
@@ -16,7 +16,7 @@ void ModbusSlaveServer::begin() {
 
     // Initialize UART1 for RS485 communication
     Serial1.begin(MODBUS_BAUDRATE, SERIAL_8N1, PIN_RS485_RX, PIN_RS485_TX);
-    
+
     // Pass Serial1 stream and hardware direction control pin.
     _mb.begin(&Serial1, PIN_RS485_DIR);
     

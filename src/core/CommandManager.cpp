@@ -7,11 +7,13 @@ void CommandManager::begin() {
     update(millis());
 }
 
-bool CommandManager::handleAcWrite(uint8_t channel, bool power, uint16_t tempX10, uint8_t mode) {
+bool CommandManager::handleAcWrite(uint8_t channel, bool power, uint16_t tempX10, uint8_t mode,
+                                   uint8_t fanSpeed, uint8_t swingVertical, uint8_t swingHorizontal) {
     if (_irModule == nullptr || !_irModule->isEnabled()) {
         return false;
     }
-    return _irModule->queueAcCommand(channel, power, tempX10, mode);
+    return _irModule->queueAcCommand(channel, power, tempX10, mode,
+                                     fanSpeed, swingVertical, swingHorizontal);
 }
 
 bool CommandManager::handleProjectorWrite(bool power, uint16_t inputVal) {

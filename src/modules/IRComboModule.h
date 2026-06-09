@@ -16,6 +16,9 @@ struct IrCommand {
     bool power;
     uint16_t value; // temp for AC, input mode for projector
     uint8_t mode;   // mode for AC
+    uint8_t fanSpeed;
+    uint8_t swingVertical;
+    uint8_t swingHorizontal;
 };
 
 class IRComboModule : public ModuleInterface {
@@ -31,6 +34,8 @@ private:
     uint32_t _commandStartMs;
     uint32_t _cooldownStartMs;
     IrCommand _activeCmd;
+    bool _projectorSequenceActive;
+    uint8_t _projectorSequenceStep;
 
     // Dynamic assignments
     bool _ac1Enabled;
@@ -43,6 +48,7 @@ private:
     uint16_t _projCmdStatus;
 
     void executeCommand();
+    void processProjectorSequence(uint32_t now_ms);
 
 public:
     IRComboModule();
@@ -66,7 +72,8 @@ public:
     /**
      * @brief Queue a command for an AC unit.
      */
-    bool queueAcCommand(uint8_t channel, bool power, uint16_t tempX10, uint8_t mode);
+    bool queueAcCommand(uint8_t channel, bool power, uint16_t tempX10, uint8_t mode,
+                        uint8_t fanSpeed, uint8_t swingVertical, uint8_t swingHorizontal);
     
     /**
      * @brief Queue a command for the projector.
