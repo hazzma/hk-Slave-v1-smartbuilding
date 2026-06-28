@@ -131,17 +131,13 @@ Loop harus sering berputar. Tidak ada `delay()` di production loop. Modbus callb
 ## Pairing Flow
 
 ```mermaid
-sequenceDiagram
-    participant M as Master
-    participant S as Slave
-
-    S->>S: Boot di address 247
-    M->>S: Read identity registers
-    S-->>M: FW version + MAC
-    M->>S: Write capability assignment
-    S->>S: Enable assigned modules only
-    M->>S: Write node address 2..246
-    S->>S: Switch Modbus address
+flowchart TD
+    A[Slave boot di address 247] --> B[Master read identity registers]
+    B --> C[Slave return FW version + MAC]
+    C --> D[Master write capability assignment]
+    D --> E[Slave enable assigned modules only]
+    E --> F[Master write node address 2..246]
+    F --> G[Slave switch Modbus address]
 ```
 
 Address valid adalah `2..246`. Jika master menulis address di luar range itu, firmware menolak dan mengisi `last_error`.
@@ -155,11 +151,11 @@ flowchart TD
     A[Slave reboot] --> B[Address balik ke 247]
     B --> C[Master write recovery MAC]
     C --> D[Master write recovery node address]
-    D --> E{MAC cocok dengan MAC lokal?}
-    E -- Ya --> F{Address 2..246?}
-    F -- Ya --> G[Apply saved address]
-    F -- Tidak --> H[Set bad address error]
-    E -- Tidak --> I[Reject recovery]
+    D --> E{"MAC cocok?"}
+    E -->|Ya| F{"Address 2..246?"}
+    E -->|Tidak| I[Reject recovery]
+    F -->|Ya| G[Apply saved address]
+    F -->|Tidak| H[Set bad address error]
 ```
 
 Catatan implementasi saat ini: slave dengan address 247 akan membalas response (perilaku default library Modbus), sehingga collision tidak dapat dicegah secara lokal di slave. Oleh karena itu, Master harus mengabaikan (ignore) response collision atau error yang muncul selama proses recovery transaction di address 247.
