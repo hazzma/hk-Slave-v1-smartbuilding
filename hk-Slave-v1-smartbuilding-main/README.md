@@ -138,10 +138,10 @@ sequenceDiagram
     S->>S: Boot di address 247
     M->>S: Read identity registers
     S-->>M: FW version + MAC
+    M->>S: Write capability assignment
+    S->>S: Enable assigned modules only
     M->>S: Write node address 2..246
     S->>S: Switch Modbus address
-    M->>S: Write capability assignment (ke address baru)
-    S->>S: Enable assigned modules only
 ```
 
 Address valid adalah `2..246`. Jika master menulis address di luar range itu, firmware menolak dan mengisi `last_error`.

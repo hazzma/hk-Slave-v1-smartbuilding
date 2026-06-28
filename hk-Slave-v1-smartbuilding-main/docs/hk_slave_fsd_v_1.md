@@ -1118,6 +1118,12 @@ Master read identity registers
 ↓
 Master reads MAC
 ↓
+Master writes capability assignment
+↓
+Slave stores assignment in RAM
+↓
+Slave initializes assigned modules
+↓
 Master writes new node address
 ↓
 Slave validates address range
@@ -1125,12 +1131,6 @@ Slave validates address range
 Slave switches active Modbus address
 ↓
 Slave exits pairing address 247
-↓
-Master writes capability assignment (dikirim ke new active Modbus address)
-↓
-Slave stores assignment in RAM
-↓
-Slave initializes assigned modules
 ```
 
 Slave tidak menyimpan address ke EEPROM/NVS.
@@ -1611,8 +1611,8 @@ Berikut adalah daftar pembaruan yang dilakukan pada FSD V1.2:
    - Konfigurasi pull-down ini hanya boleh dilakukan ketika Presence Digital Module diinisialisasi secara dinamis (saat `begin()` dipanggil pasca capability assignment oleh master) dan dilarang diset langsung saat boot up device.
 2. **Dukungan Epson Projector**:
    - Mengubah spesifikasi projector dari khusus Panasonic menjadi universal untuk semua jenis proyektor EPSON.
-3. **Perbaikan Pairing Flow**:
-   - Mengoreksi urutan pairing: Setelah master membaca MAC, master mengirimkan node address baru ke slave, slave beralih ke address Modbus yang baru tersebut, baru kemudian master menuliskan capability assignment di address baru tersebut.
+3. **Pairing Flow**:
+   - Pairing flow dikembalikan ke urutan semula di mana Master menulis capability assignment ke address 247 sebelum menuliskan node address baru.
 4. **Penanganan Error I2C (BH1750 & SCD30)**:
    - Menambahkan kebijakan penanganan error I2C untuk modul BH1750 dan SCD30.
    - Jika inisialisasi awal gagal, modul ditandai sebagai belum terinisialisasi.
