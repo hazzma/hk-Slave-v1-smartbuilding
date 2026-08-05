@@ -74,4 +74,3 @@ Every sub-agent must adhere to the following rules, with zero exceptions:
 ## 4. Testing & Uploading Policy
 
 > [!CAUTION]
-> **DO NOT FLASH OR UPLOAD**: Under no circumstances should any sub-agent run flashing or uploading commands (e.g. `pio run -t upload`). Another board is currently connected to the host computer. Only local compilation tests (`pio run`) are allowed to verify that the code compiles successfully.

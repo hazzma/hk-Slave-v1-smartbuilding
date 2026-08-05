@@ -23,6 +23,9 @@ bool SCD30Module::begin() {
             success = false;
         }
         _lastReadMs = 0;
+        if (_enabled) {
+            _driver->setFanState(true);
+        }
     }
     _status = success ? MODULE_READY : MODULE_ERROR;
     return success;
@@ -52,6 +55,7 @@ void SCD30Module::update(uint32_t now_ms) {
             return;
         }
         _lastReadMs = 0;
+        _driver->setFanState(true);
     }
 
     // Limit read to every 2000 ms and check dataReady()
@@ -85,6 +89,9 @@ void SCD30Module::setEnabled(bool enabled) {
     _enabled = enabled;
     if (!_enabled) {
         _status = MODULE_DISABLED;
+        _driver->setFanState(false);
+    } else if (_assigned) {
+        _driver->setFanState(true);
     }
 }
 
@@ -93,10 +100,14 @@ void SCD30Module::setAssigned(bool assigned) {
     if (!assigned) {
         _cachedCO2 = 0xFFFE; // Reset to unassigned sentinel
         _error = false;
+        _driver->setFanState(false);
     } else {
-        if (_enabled && !_driver->isInitialized()) {
-            _driver->begin();
-            _lastReadMs = 0;
+        if (_enabled) {
+            _driver->setFanState(true);
+            if (!_driver->isInitialized()) {
+                _driver->begin();
+                _lastReadMs = 0;
+            }
         }
     }
 }

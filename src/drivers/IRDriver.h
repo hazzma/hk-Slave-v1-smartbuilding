@@ -4,12 +4,15 @@
 #include <Arduino.h>
 #include <IRsend.h>
 #include <ir_Panasonic.h>
+#include <ir_Carrier.h>
 #include "../config/Pins.h"
 
 class IRDriver {
 private:
     IRPanasonicAc _panasonicAc1;
     IRPanasonicAc _panasonicAc2;
+    IRCarrierAc64 _carrierAc1;
+    IRCarrierAc64 _carrierAc2;
     IRsend _irSendProjA;
     IRsend _irSendProjB;
     bool _initialized;
@@ -21,6 +24,10 @@ private:
     static bool applyPanasonicDkeFan(IRPanasonicAc* ac, uint8_t fanSpeed);
     static bool applyPanasonicDkeSwingVertical(IRPanasonicAc* ac, uint8_t swingVertical);
     static bool applyPanasonicDkeSwingHorizontal(IRPanasonicAc* ac, uint8_t swingHorizontal);
+
+    static uint8_t mapCarrierMode(uint8_t mode);
+    static uint8_t mapCarrierFan(uint8_t fanSpeed);
+    static bool mapCarrierSwingVertical(uint8_t swingVertical);
 
 public:
     IRDriver();

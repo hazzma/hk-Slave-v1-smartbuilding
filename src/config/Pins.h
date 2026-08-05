@@ -40,4 +40,7 @@
 #define PIN_RELAY_1             PIN_PORT_0
 #define PIN_RELAY_2             PIN_PORT_1
 
+// CO2 Fan Pin Mapping
+#define PIN_CO2_FAN             10
+
 #endif // CONFIG_PINS_H

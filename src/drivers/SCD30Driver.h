@@ -16,6 +16,7 @@ public:
     bool dataAvailable();
     uint16_t readCO2();
     bool isInitialized() const { return _initialized; }
+    void setFanState(bool active);
 };
 
 #endif // DRIVERS_SCD30_DRIVER_H

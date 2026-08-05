@@ -3,6 +3,8 @@
 IRDriver::IRDriver() 
     : _panasonicAc1(PIN_IR_AC_1),
       _panasonicAc2(PIN_IR_AC_2),
+      _carrierAc1(PIN_IR_AC_1),
+      _carrierAc2(PIN_IR_AC_2),
       _irSendProjA(PIN_IR_PROJECTOR_A), 
       _irSendProjB(PIN_IR_PROJECTOR_B), 
       _initialized(false),
@@ -17,6 +19,10 @@ void IRDriver::begin(bool enableAc1, bool enableAc2, bool enableProjector) {
         _panasonicAc1.setFan(kPanasonicAcFanAuto);
         _panasonicAc1.setSwingVertical(kPanasonicAcSwingVAuto);
         _panasonicAc1.setSwingHorizontal(kPanasonicAcSwingHAuto);
+
+        _carrierAc1.begin();
+        _carrierAc1.setFan(kCarrierAc64FanAuto);
+        _carrierAc1.setSwingV(true);
         _ac1Initialized = true;
     }
 
@@ -26,6 +32,10 @@ void IRDriver::begin(bool enableAc1, bool enableAc2, bool enableProjector) {
         _panasonicAc2.setFan(kPanasonicAcFanAuto);
         _panasonicAc2.setSwingVertical(kPanasonicAcSwingVAuto);
         _panasonicAc2.setSwingHorizontal(kPanasonicAcSwingHAuto);
+
+        _carrierAc2.begin();
+        _carrierAc2.setFan(kCarrierAc64FanAuto);
+        _carrierAc2.setSwingV(true);
         _ac2Initialized = true;
     }
 
@@ -36,6 +46,36 @@ void IRDriver::begin(bool enableAc1, bool enableAc2, bool enableProjector) {
     }
 
     _initialized = _ac1Initialized || _ac2Initialized || _projectorInitialized;
+}
+
+uint8_t IRDriver::mapCarrierMode(uint8_t mode) {
+    switch (mode) {
+        case 0: return kCarrierAc64Cool;
+        case 1: return kCarrierAc64Cool; // Carrier 64-bit protocol has no discrete Dry mode
+        case 2: return kCarrierAc64Fan;
+        case 3: return kCarrierAc64Heat;
+        case 4: return kCarrierAc64Cool;
+        default: return kCarrierAc64Cool;
+    }
+}
+
+uint8_t IRDriver::mapCarrierFan(uint8_t fanSpeed) {
+    switch (fanSpeed) {
+        case 0: return kCarrierAc64FanAuto;
+        case 1: return kCarrierAc64FanLow;
+        case 2: return kCarrierAc64FanMedium;
+        case 3: return kCarrierAc64FanHigh;
+        case 4: return kCarrierAc64FanLow;    // Quiet -> Low
+        case 5: return kCarrierAc64FanHigh;   // Powerful -> High
+        default: return kCarrierAc64FanAuto;
+    }
+}
+
+bool IRDriver::mapCarrierSwingVertical(uint8_t swingVertical) {
+    switch (swingVertical) {
+        case 1: return true;  // Auto swing ON
+        default: return false; // Fixed/off
+    }
 }
 
 uint8_t IRDriver::mapPanasonicDkeMode(uint8_t mode) {
@@ -184,27 +224,47 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
         return false;
     }
 
-    IRPanasonicAc* ac = nullptr;
+    IRPanasonicAc* panasonicAc = nullptr;
+    IRCarrierAc64* carrierAc = nullptr;
     if (channel == 1) {
         if (!_ac1Initialized) return false;
-        ac = &_panasonicAc1;
+        panasonicAc = &_panasonicAc1;
+        carrierAc = &_carrierAc1;
     } else if (channel == 2) {
         if (!_ac2Initialized) return false;
-        ac = &_panasonicAc2;
+        panasonicAc = &_panasonicAc2;
+        carrierAc = &_carrierAc2;
     } else {
         return false;
     }
 
-    ac->setModel(kPanasonicDke);
-    ac->setPower(power);
-    ac->setTemp(static_cast<uint8_t>(tempX10 / 10));
-    ac->setMode(mapPanasonicDkeMode(mode));
-    if (!applyPanasonicDkeFan(ac, fanSpeed) ||
-        !applyPanasonicDkeSwingVertical(ac, swingVertical) ||
-        !applyPanasonicDkeSwingHorizontal(ac, swingHorizontal)) {
+    // 1. Send Panasonic DKE AC IR signal
+    panasonicAc->setModel(kPanasonicDke);
+    panasonicAc->setPower(power);
+    panasonicAc->setTemp(static_cast<uint8_t>(tempX10 / 10));
+    panasonicAc->setMode(mapPanasonicDkeMode(mode));
+    if (!applyPanasonicDkeFan(panasonicAc, fanSpeed) ||
+        !applyPanasonicDkeSwingVertical(panasonicAc, swingVertical) ||
+        !applyPanasonicDkeSwingHorizontal(panasonicAc, swingHorizontal)) {
         return false;
     }
-    ac->send();
+    panasonicAc->send();
+
+    // 2. Inter-protocol gap (40ms) to ensure clean separation between Panasonic and Carrier IR frames
+    delay(40);
+
+    // 3. Send Carrier AC 64-bit IR signal
+    carrierAc->setPower(power);
+    carrierAc->setTemp(static_cast<uint8_t>(tempX10 / 10));
+    carrierAc->setMode(mapCarrierMode(mode));
+    if (fanSpeed != 99) {
+        carrierAc->setFan(mapCarrierFan(fanSpeed));
+    }
+    if (swingVertical != 99) {
+        carrierAc->setSwingV(mapCarrierSwingVertical(swingVertical));
+    }
+    carrierAc->send();
+
     return true;
 }
 
