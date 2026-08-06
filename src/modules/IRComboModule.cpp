@@ -72,8 +72,9 @@ void IRComboModule::irTaskFunction(void* pvParam) {
 
         if (target == IR_TARGET_AC1 || target == IR_TARGET_AC2) {
             uint8_t channel = (target == IR_TARGET_AC1) ? 1 : 2;
-            // This call is blocking (~150-200 ms) but yields to other tasks
-            // during the hardware-driven delay(40) and RMT wait.
+            Serial.printf("[IRComboModule] ir_task: dispatching channel=%u to driver\n", channel);
+            // This call is blocking (~30-50 ms for one Coolix frame) but
+            // yields to other tasks during the RMT hardware wait.
             success = self->_driver->sendPanasonicDke(
                 channel,
                 self->_activeCmd.power,
@@ -82,6 +83,7 @@ void IRComboModule::irTaskFunction(void* pvParam) {
                 self->_activeCmd.fanSpeed,
                 self->_activeCmd.swingVertical,
                 self->_activeCmd.swingHorizontal);
+            Serial.printf("[IRComboModule] ir_task: driver returned success=%d\n", success);
         }
 
         self->_irTaskSuccess   = success;
@@ -266,16 +268,19 @@ static bool isSupportedAcSwing(uint8_t swing) {
 bool IRComboModule::queueAcCommand(uint8_t channel, bool power, uint16_t tempX10, uint8_t mode,
                                    uint8_t fanSpeed, uint8_t swingVertical, uint8_t swingHorizontal) {
     if (!_enabled) {
+        Serial.printf("[IRComboModule] queueAcCommand: REJECTED ch=%u — module not _enabled (check ir_projector/ac1/ac2 capability registers)\n", channel);
         if (channel == 1) _ac1CmdStatus = CMD_FAILED;
         else if (channel == 2) _ac2CmdStatus = CMD_FAILED;
         return false;
     }
-    
+
     if (channel == 1 && !_ac1Enabled) {
+        Serial.printf("[IRComboModule] queueAcCommand: REJECTED ch=1 — _ac1Enabled is false (ir_ac_1_enable capability not set by master)\n");
         _ac1CmdStatus = CMD_FAILED;
         return false;
     }
     if (channel == 2 && !_ac2Enabled) {
+        Serial.printf("[IRComboModule] queueAcCommand: REJECTED ch=2 — _ac2Enabled is false (ir_ac_2_enable capability not set by master)\n");
         _ac2CmdStatus = CMD_FAILED;
         return false;
     }
@@ -283,10 +288,15 @@ bool IRComboModule::queueAcCommand(uint8_t channel, bool power, uint16_t tempX10
     if (tempX10 < 160 || tempX10 > 300 || tempX10 % 10 != 0 || mode > 4 ||
         !isSupportedAcFan(fanSpeed) || !isSupportedAcSwing(swingVertical) ||
         !isSupportedAcSwing(swingHorizontal)) {
+        Serial.printf("[IRComboModule] queueAcCommand: REJECTED ch=%u — invalid params (tempX10=%u mode=%u fan=%u swingV=%u swingH=%u)\n",
+                      channel, tempX10, mode, fanSpeed, swingVertical, swingHorizontal);
         if (channel == 1) _ac1CmdStatus = CMD_FAILED;
         else _ac2CmdStatus = CMD_FAILED;
         return false;
     }
+
+    Serial.printf("[IRComboModule] queueAcCommand: staged ch=%u power=%d tempX10=%u mode=%u fan=%u\n",
+                  channel, power, tempX10, mode, fanSpeed);
     
     // Always stage – this resets the settling timer even when busy,
     // so the latest value from Master is used when the IR task fires next.
