@@ -47,6 +47,11 @@ private:
     uint16_t _ac2CmdStatus;
     uint16_t _projCmdStatus;
 
+    // Staged command buffer for debouncing multi-register writes
+    IrCommand _stagedCmd[2];
+    bool _stagedPending[2];
+    uint32_t _settlingStartMs[2];
+
     void executeCommand();
     void processProjectorSequence(uint32_t now_ms);
 

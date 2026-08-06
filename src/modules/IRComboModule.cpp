@@ -19,6 +19,12 @@ IRComboModule::IRComboModule()
       _projCmdStatus(CMD_IDLE) {
       
     _activeCmd = { IR_TARGET_AC1, false, 0, 0, 99, 99, 99 };
+    _stagedCmd[0] = { IR_TARGET_AC1, false, 0, 0, 99, 99, 99 };
+    _stagedCmd[1] = { IR_TARGET_AC2, false, 0, 0, 99, 99, 99 };
+    _stagedPending[0] = false;
+    _stagedPending[1] = false;
+    _settlingStartMs[0] = 0;
+    _settlingStartMs[1] = 0;
 }
 
 IRComboModule::~IRComboModule() {
@@ -46,10 +52,27 @@ void IRComboModule::update(uint32_t now_ms) {
     if (_busy && !_commandPending && !_projectorSequenceActive) {
         if (now_ms - _cooldownStartMs >= 1000) {
             _busy = false;
-            // Transition the status of the finished command channel back to IDLE
-            if (_activeCmd.target == IR_TARGET_AC1) _ac1CmdStatus = CMD_IDLE;
-            else if (_activeCmd.target == IR_TARGET_AC2) _ac2CmdStatus = CMD_IDLE;
+            // Transition the status of the finished command channel back to IDLE if no staged command is pending
+            if (_activeCmd.target == IR_TARGET_AC1 && !_stagedPending[0]) _ac1CmdStatus = CMD_IDLE;
+            else if (_activeCmd.target == IR_TARGET_AC2 && !_stagedPending[1]) _ac2CmdStatus = CMD_IDLE;
             else if (_activeCmd.target == IR_TARGET_PROJECTOR) _projCmdStatus = CMD_IDLE;
+        }
+    }
+
+    // Process staged AC commands after 100ms settling window when module is not busy
+    if (!_busy && !_commandPending && !_projectorSequenceActive) {
+        for (uint8_t idx = 0; idx < 2; idx++) {
+            if (_stagedPending[idx]) {
+                if (now_ms - _settlingStartMs[idx] >= 100) {
+                    _activeCmd = _stagedCmd[idx];
+                    _stagedPending[idx] = false;
+                    _commandPending = true;
+                    _busy = true;
+                    if (idx == 0) _ac1CmdStatus = CMD_BUSY;
+                    else _ac2CmdStatus = CMD_BUSY;
+                    break;
+                }
+            }
         }
     }
 
@@ -172,22 +195,17 @@ bool IRComboModule::queueAcCommand(uint8_t channel, bool power, uint16_t tempX10
         return false;
     }
     
-    if (_busy) {
-        if (channel == 1) _ac1CmdStatus = CMD_BUSY;
-        else _ac2CmdStatus = CMD_BUSY;
-        return false;
-    }
+    uint8_t idx = (channel == 1) ? 0 : 1;
+    _stagedCmd[idx].target = (channel == 1) ? IR_TARGET_AC1 : IR_TARGET_AC2;
+    _stagedCmd[idx].power = power;
+    _stagedCmd[idx].value = tempX10;
+    _stagedCmd[idx].mode = mode;
+    _stagedCmd[idx].fanSpeed = fanSpeed;
+    _stagedCmd[idx].swingVertical = swingVertical;
+    _stagedCmd[idx].swingHorizontal = swingHorizontal;
 
-    _activeCmd.target = (channel == 1) ? IR_TARGET_AC1 : IR_TARGET_AC2;
-    _activeCmd.power = power;
-    _activeCmd.value = tempX10;
-    _activeCmd.mode = mode;
-    _activeCmd.fanSpeed = fanSpeed;
-    _activeCmd.swingVertical = swingVertical;
-    _activeCmd.swingHorizontal = swingHorizontal;
-    
-    _commandPending = true;
-    _busy = true;
+    _stagedPending[idx] = true;
+    _settlingStartMs[idx] = millis();
 
     if (channel == 1) _ac1CmdStatus = CMD_BUSY;
     else _ac2CmdStatus = CMD_BUSY;
