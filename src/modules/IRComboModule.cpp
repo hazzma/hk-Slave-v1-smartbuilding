@@ -73,8 +73,14 @@ void IRComboModule::irTaskFunction(void* pvParam) {
         if (target == IR_TARGET_AC1 || target == IR_TARGET_AC2) {
             uint8_t channel = (target == IR_TARGET_AC1) ? 1 : 2;
             Serial.printf("[IRComboModule] ir_task: dispatching channel=%u to driver\n", channel);
+            // Temporarily boost priority to prevent FreeRTOS time-slicing from
+            // stretching the software bit-banging timing used by IRsend.
+            UBaseType_t oldPriority = uxTaskPriorityGet(NULL);
+            vTaskPrioritySet(NULL, configMAX_PRIORITIES - 1);
+
             // This call is blocking (~30-50 ms for one Coolix frame) but
-            // yields to other tasks during the RMT hardware wait.
+            // yields to other tasks during the RMT hardware wait. (Or in this case,
+            // software bit-banging which MUST NOT be interrupted by equal-priority tasks).
             success = self->_driver->sendPanasonicDke(
                 channel,
                 self->_activeCmd.power,
@@ -84,6 +90,9 @@ void IRComboModule::irTaskFunction(void* pvParam) {
                 self->_activeCmd.swingVertical,
                 self->_activeCmd.swingHorizontal);
             Serial.printf("[IRComboModule] ir_task: driver returned success=%d\n", success);
+
+            // Restore original priority
+            vTaskPrioritySet(NULL, oldPriority);
         }
 
         self->_irTaskSuccess   = success;

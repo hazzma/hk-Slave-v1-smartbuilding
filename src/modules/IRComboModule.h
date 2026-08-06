@@ -56,8 +56,8 @@ private:
     bool _stagedPending[2];
     uint32_t _settlingStartMs[2];
 
-    // FreeRTOS IR task – offloads blocking sendPanasonicDke() so the Modbus
-    // main loop can continue responding during the ~150-200 ms IR transmission.
+    // FreeRTOS IR task – offloads blocking sendCoolixAc() so the Modbus
+    // main loop can continue responding during the IR transmission.
     TaskHandle_t _irTaskHandle;
     SemaphoreHandle_t _irTriggerSem;    // main loop gives → IR task wakes
     volatile bool _irTaskRunning;       // true while IR task is executing

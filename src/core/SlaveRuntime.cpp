@@ -16,7 +16,7 @@ SlaveRuntime::SlaveRuntime() {
     memset(&_capability, 0, sizeof(_capability));
     memset(&_state, 0, sizeof(_state));
 
-    _identity.fw_version = 210; // representing v2.1.0
+    _identity.fw_version = 211; // representing v2.1.1
 
     // Set initial boot parameters according to FSD
     _state.active_address = DEFAULT_MODBUS_ADDRESS; // 247

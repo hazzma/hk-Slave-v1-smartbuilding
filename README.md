@@ -560,6 +560,14 @@ assignment yang konflik. Di sisi slave, IR hanya melakukan `begin()` pada
 channel IR yang benar-benar assigned sehingga projector-only tidak lagi
 menimpa output relay menjadi LOW.
 
+## Changelog
+
+### v2.1.1 (2026-08-06)
+- **Fix (IR Transmission Timing)**: Fixed IR signal corruption and pulse stretching (`UNKNOWN` protocol) caused by FreeRTOS time-slicing between `ir_task` and main `loopTask` during software bit-banging (`delayMicroseconds()`). Added dynamic task priority boosting (`configMAX_PRIORITIES - 1`) during IR payload transmission.
+- **Feature (Carrier Central AC / COOLIX Protocol)**: Integrated native `IRCoolixAC` protocol driver for Carrier Central AC support.
+- **Fix (BH1750 Backoff)**: Added polling backoff mechanism (30s) when BH1750 sensor is disconnected to prevent I2C NACK error log spamming.
+- **Docs**: Added comprehensive IR troubleshooting and Panasonic re-enabling guide in `docs/IR_Troubleshooting.md`.
+
 ## Dokumen Utama
 
 FSD lengkap ada di:

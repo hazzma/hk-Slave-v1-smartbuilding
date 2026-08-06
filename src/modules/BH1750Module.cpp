@@ -80,8 +80,12 @@ void BH1750Module::update(uint32_t now_ms) {
             _lastReadMs[i] = 0;
         }
 
-        // Poll every 1000 ms
-        if (now_ms - _lastReadMs[i] >= 1000 || _lastReadMs[i] == 0) {
+        // Poll every 1000 ms normally; back off to every 30000 ms once a
+        // channel is in a persistent error state (e.g. sensor not wired),
+        // so a disconnected sensor doesn't flood Serial with NACK errors
+        // from the BH1750 library every second.
+        uint32_t pollIntervalMs = _channelError[i] ? 30000 : 1000;
+        if (now_ms - _lastReadMs[i] >= pollIntervalMs || _lastReadMs[i] == 0) {
             float lux = _drivers[i]->readLightLevel();
             
             if (lux < 0.0f) {
