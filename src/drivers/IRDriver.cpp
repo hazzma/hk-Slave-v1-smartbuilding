@@ -261,8 +261,8 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
     }
     panasonicAc->send();
 
-    // 2. Inter-protocol gap (40ms) to ensure clean separation between Panasonic and Carrier IR frames
-    delay(40);
+    // 2. Inter-protocol gap (150ms) to ensure clean separation between Panasonic and Coolix IR frames
+    delay(150);
 
     // 3. Send Coolix 48-bit IR signal
     coolixAc->stateReset();
