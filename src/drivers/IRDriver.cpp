@@ -229,6 +229,7 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
         return false;
     }
 
+    /*
     // 1. Send Panasonic DKE AC IR signal
     panasonicAc->setModel(kPanasonicDke);
     panasonicAc->setPower(power);
@@ -243,8 +244,9 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
 
     // 2. Inter-protocol gap (40ms) to ensure clean separation between Panasonic and Carrier IR frames
     delay(40);
+    */
 
-    // 3. Send Coolix IR signal using native library send()
+    // Send Coolix IR signal using native library send()
     coolixAc->stateReset();
     if (power) {
         coolixAc->setPower(true);
