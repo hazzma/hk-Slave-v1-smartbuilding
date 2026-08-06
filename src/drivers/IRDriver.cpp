@@ -3,8 +3,10 @@
 IRDriver::IRDriver() 
     : _panasonicAc1(PIN_IR_AC_1),
       _panasonicAc2(PIN_IR_AC_2),
-      _carrierAc1(PIN_IR_AC_1),
-      _carrierAc2(PIN_IR_AC_2),
+      _coolixAc1(PIN_IR_AC_1),
+      _coolixAc2(PIN_IR_AC_2),
+      _irSendAc1(PIN_IR_AC_1),
+      _irSendAc2(PIN_IR_AC_2),
       _irSendProjA(PIN_IR_PROJECTOR_A), 
       _irSendProjB(PIN_IR_PROJECTOR_B), 
       _initialized(false),
@@ -20,9 +22,9 @@ void IRDriver::begin(bool enableAc1, bool enableAc2, bool enableProjector) {
         _panasonicAc1.setSwingVertical(kPanasonicAcSwingVAuto);
         _panasonicAc1.setSwingHorizontal(kPanasonicAcSwingHAuto);
 
-        _carrierAc1.begin();
-        _carrierAc1.setFan(kCarrierAc64FanAuto);
-        _carrierAc1.setSwingV(true);
+        _coolixAc1.begin();
+        _irSendAc1.begin();
+        _coolixAc1.setFan(kCoolixFanAuto);
         _ac1Initialized = true;
     }
 
@@ -33,9 +35,9 @@ void IRDriver::begin(bool enableAc1, bool enableAc2, bool enableProjector) {
         _panasonicAc2.setSwingVertical(kPanasonicAcSwingVAuto);
         _panasonicAc2.setSwingHorizontal(kPanasonicAcSwingHAuto);
 
-        _carrierAc2.begin();
-        _carrierAc2.setFan(kCarrierAc64FanAuto);
-        _carrierAc2.setSwingV(true);
+        _coolixAc2.begin();
+        _irSendAc2.begin();
+        _coolixAc2.setFan(kCoolixFanAuto);
         _ac2Initialized = true;
     }
 
@@ -48,34 +50,40 @@ void IRDriver::begin(bool enableAc1, bool enableAc2, bool enableProjector) {
     _initialized = _ac1Initialized || _ac2Initialized || _projectorInitialized;
 }
 
-uint8_t IRDriver::mapCarrierMode(uint8_t mode) {
+uint8_t IRDriver::mapCoolixMode(uint8_t mode) {
     switch (mode) {
-        case 0: return kCarrierAc64Cool;
-        case 1: return kCarrierAc64Cool; // Carrier 64-bit protocol has no discrete Dry mode
-        case 2: return kCarrierAc64Fan;
-        case 3: return kCarrierAc64Heat;
-        case 4: return kCarrierAc64Cool;
-        default: return kCarrierAc64Cool;
+        case 0: return kCoolixCool;
+        case 1: return kCoolixDry;
+        case 2: return kCoolixFan;
+        case 3: return kCoolixHeat;
+        case 4: return kCoolixAuto;
+        default: return kCoolixCool;
     }
 }
 
-uint8_t IRDriver::mapCarrierFan(uint8_t fanSpeed) {
+uint8_t IRDriver::mapCoolixFan(uint8_t fanSpeed) {
     switch (fanSpeed) {
-        case 0: return kCarrierAc64FanAuto;
-        case 1: return kCarrierAc64FanLow;
-        case 2: return kCarrierAc64FanMedium;
-        case 3: return kCarrierAc64FanHigh;
-        case 4: return kCarrierAc64FanLow;    // Quiet -> Low
-        case 5: return kCarrierAc64FanHigh;   // Powerful -> High
-        default: return kCarrierAc64FanAuto;
+        case 0: return kCoolixFanAuto;
+        case 1: return kCoolixFanMin;
+        case 2: return kCoolixFanMed;
+        case 3: return kCoolixFanMax;
+        case 4: return kCoolixFanMin; // Quiet -> Min
+        case 5: return kCoolixFanMax; // Powerful -> Max
+        default: return kCoolixFanAuto;
     }
 }
 
-bool IRDriver::mapCarrierSwingVertical(uint8_t swingVertical) {
-    switch (swingVertical) {
-        case 1: return true;  // Auto swing ON
-        default: return false; // Fixed/off
-    }
+uint64_t IRDriver::buildCoolix48(uint32_t coolix24_raw, uint8_t fRangeCode) {
+    uint64_t parity = coolix24_raw ^ 0xFFFFFFFFULL;
+    uint64_t out = 0;
+    out |= ((uint64_t)((coolix24_raw >> 16) & 0xFF)) << 40;
+    out |= ((uint64_t)((parity       >> 16) & 0xFF)) << 32;
+    out |= ((uint64_t)((coolix24_raw >>  8) & 0xFF)) << 24;
+    out |= ((uint64_t)((parity       >>  8) & 0xFF)) << 16;
+    out |= ((uint64_t)( coolix24_raw        & 0xFF)) <<  8;
+    out |=  (parity & 0xFF);
+    out |= ((uint64_t)fRangeCode) << 36;
+    return out;
 }
 
 uint8_t IRDriver::mapPanasonicDkeMode(uint8_t mode) {
@@ -225,15 +233,18 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
     }
 
     IRPanasonicAc* panasonicAc = nullptr;
-    IRCarrierAc64* carrierAc = nullptr;
+    IRCoolixAC* coolixAc = nullptr;
+    IRsend* irSendAc = nullptr;
     if (channel == 1) {
         if (!_ac1Initialized) return false;
         panasonicAc = &_panasonicAc1;
-        carrierAc = &_carrierAc1;
+        coolixAc = &_coolixAc1;
+        irSendAc = &_irSendAc1;
     } else if (channel == 2) {
         if (!_ac2Initialized) return false;
         panasonicAc = &_panasonicAc2;
-        carrierAc = &_carrierAc2;
+        coolixAc = &_coolixAc2;
+        irSendAc = &_irSendAc2;
     } else {
         return false;
     }
@@ -253,17 +264,20 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
     // 2. Inter-protocol gap (40ms) to ensure clean separation between Panasonic and Carrier IR frames
     delay(40);
 
-    // 3. Send Carrier AC 64-bit IR signal
-    carrierAc->setPower(power);
-    carrierAc->setTemp(static_cast<uint8_t>(tempX10 / 10));
-    carrierAc->setMode(mapCarrierMode(mode));
-    if (fanSpeed != 99) {
-        carrierAc->setFan(mapCarrierFan(fanSpeed));
+    // 3. Send Coolix 48-bit IR signal
+    coolixAc->stateReset();
+    if (power) {
+        coolixAc->setPower(true);
+        coolixAc->setTemp(static_cast<uint8_t>(tempX10 / 10));
+        coolixAc->setMode(mapCoolixMode(mode));
+        if (fanSpeed != 99) {
+            coolixAc->setFan(mapCoolixFan(fanSpeed));
+        }
+    } else {
+        coolixAc->off();
     }
-    if (swingVertical != 99) {
-        carrierAc->setSwingV(mapCarrierSwingVertical(swingVertical));
-    }
-    carrierAc->send();
+    uint64_t raw48 = buildCoolix48(coolixAc->getRaw(), 0);
+    irSendAc->sendCoolix48(raw48, 48);
 
     return true;
 }

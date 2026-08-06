@@ -2,17 +2,18 @@
 #define DRIVERS_IR_DRIVER_H
 
 #include <Arduino.h>
-#include <IRsend.h>
 #include <ir_Panasonic.h>
-#include <ir_Carrier.h>
+#include <ir_Coolix.h>
 #include "../config/Pins.h"
 
 class IRDriver {
 private:
     IRPanasonicAc _panasonicAc1;
     IRPanasonicAc _panasonicAc2;
-    IRCarrierAc64 _carrierAc1;
-    IRCarrierAc64 _carrierAc2;
+    IRCoolixAC _coolixAc1;
+    IRCoolixAC _coolixAc2;
+    IRsend _irSendAc1;
+    IRsend _irSendAc2;
     IRsend _irSendProjA;
     IRsend _irSendProjB;
     bool _initialized;
@@ -25,9 +26,9 @@ private:
     static bool applyPanasonicDkeSwingVertical(IRPanasonicAc* ac, uint8_t swingVertical);
     static bool applyPanasonicDkeSwingHorizontal(IRPanasonicAc* ac, uint8_t swingHorizontal);
 
-    static uint8_t mapCarrierMode(uint8_t mode);
-    static uint8_t mapCarrierFan(uint8_t fanSpeed);
-    static bool mapCarrierSwingVertical(uint8_t swingVertical);
+    static uint8_t mapCoolixMode(uint8_t mode);
+    static uint8_t mapCoolixFan(uint8_t fanSpeed);
+    static uint64_t buildCoolix48(uint32_t coolix24_raw, uint8_t fRangeCode);
 
 public:
     IRDriver();
