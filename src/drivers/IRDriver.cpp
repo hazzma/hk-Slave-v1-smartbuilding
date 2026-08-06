@@ -5,6 +5,8 @@ IRDriver::IRDriver()
       _panasonicAc2(PIN_IR_AC_2),
       _coolixAc1(PIN_IR_AC_1),
       _coolixAc2(PIN_IR_AC_2),
+      _irSendAc1(PIN_IR_AC_1),
+      _irSendAc2(PIN_IR_AC_2),
       _irSendProjA(PIN_IR_PROJECTOR_A), 
       _irSendProjB(PIN_IR_PROJECTOR_B), 
       _initialized(false),
@@ -14,26 +16,30 @@ IRDriver::IRDriver()
 
 void IRDriver::begin(bool enableAc1, bool enableAc2, bool enableProjector) {
     if (enableAc1 && !_ac1Initialized) {
-        _panasonicAc1.begin();
+        // Only initialise the SINGLE shared IRsend for this pin.
+        // Do NOT call _panasonicAc1.begin() or _coolixAc1.begin() —
+        // those would create competing IRsend objects on the same GPIO.
+        _irSendAc1.begin();
+
+        // Set up Panasonic DKE state defaults (state only, no GPIO init)
         _panasonicAc1.setModel(kPanasonicDke);
         _panasonicAc1.setFan(kPanasonicAcFanAuto);
         _panasonicAc1.setSwingVertical(kPanasonicAcSwingVAuto);
         _panasonicAc1.setSwingHorizontal(kPanasonicAcSwingHAuto);
 
-        _coolixAc1.begin();
-        _coolixAc1.setFan(kCoolixFanAuto);
+        // IRCoolixAC stateReset() was already called in its constructor.
+
         _ac1Initialized = true;
     }
 
     if (enableAc2 && !_ac2Initialized) {
-        _panasonicAc2.begin();
+        _irSendAc2.begin();
+
         _panasonicAc2.setModel(kPanasonicDke);
         _panasonicAc2.setFan(kPanasonicAcFanAuto);
         _panasonicAc2.setSwingVertical(kPanasonicAcSwingVAuto);
         _panasonicAc2.setSwingHorizontal(kPanasonicAcSwingHAuto);
 
-        _coolixAc2.begin();
-        _coolixAc2.setFan(kCoolixFanAuto);
         _ac2Initialized = true;
     }
 
@@ -68,8 +74,6 @@ uint8_t IRDriver::mapCoolixFan(uint8_t fanSpeed) {
         default: return kCoolixFanAuto;
     }
 }
-
-
 
 uint8_t IRDriver::mapPanasonicDkeMode(uint8_t mode) {
     switch (mode) {
@@ -219,19 +223,22 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
 
     IRPanasonicAc* panasonicAc = nullptr;
     IRCoolixAC* coolixAc = nullptr;
+    IRsend* irSend = nullptr;
     if (channel == 1) {
         if (!_ac1Initialized) return false;
         panasonicAc = &_panasonicAc1;
         coolixAc = &_coolixAc1;
+        irSend = &_irSendAc1;
     } else if (channel == 2) {
         if (!_ac2Initialized) return false;
         panasonicAc = &_panasonicAc2;
         coolixAc = &_coolixAc2;
+        irSend = &_irSendAc2;
     } else {
         return false;
     }
 
-    // 1. Send Panasonic DKE AC IR signal
+    // 1. Build Panasonic DKE state
     panasonicAc->setModel(kPanasonicDke);
     panasonicAc->setPower(power);
     panasonicAc->setTemp(static_cast<uint8_t>(tempX10 / 10));
@@ -241,12 +248,14 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
         !applyPanasonicDkeSwingHorizontal(panasonicAc, swingHorizontal)) {
         return false;
     }
-    panasonicAc->send();
 
-    // 2. Inter-protocol gap (250ms) to ensure clean separation between Panasonic and Coolix IR frames
+    // Send Panasonic via the SHARED IRsend (not panasonicAc->send())
+    irSend->sendPanasonicAC(panasonicAc->getRaw(), kPanasonicAcStateLength);
+
+    // 2. Inter-protocol gap (250ms) — clean separation for IR receivers
     delay(250);
 
-    // 3. Send standard 24-bit Coolix IR signal
+    // 3. Build Coolix state
     coolixAc->stateReset();
     if (power) {
         coolixAc->setPower(true);
@@ -258,7 +267,9 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
     } else {
         coolixAc->off();
     }
-    coolixAc->send();
+
+    // Send Coolix via the SAME shared IRsend (not coolixAc->send())
+    irSend->sendCOOLIX(coolixAc->getRaw());
 
     return true;
 }

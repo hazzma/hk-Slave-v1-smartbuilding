@@ -2,18 +2,25 @@
 #define DRIVERS_IR_DRIVER_H
 
 #include <Arduino.h>
+#include <IRsend.h>
 #include <ir_Panasonic.h>
 #include <ir_Coolix.h>
 #include "../config/Pins.h"
 
 class IRDriver {
 private:
+    // State builders — used ONLY to compose AC states, never call begin()
     IRPanasonicAc _panasonicAc1;
     IRPanasonicAc _panasonicAc2;
     IRCoolixAC _coolixAc1;
     IRCoolixAC _coolixAc2;
+
+    // Single shared transmitter per physical pin
+    IRsend _irSendAc1;
+    IRsend _irSendAc2;
     IRsend _irSendProjA;
     IRsend _irSendProjB;
+
     bool _initialized;
     bool _ac1Initialized;
     bool _ac2Initialized;
