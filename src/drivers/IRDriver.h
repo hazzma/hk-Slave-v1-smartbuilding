@@ -12,8 +12,6 @@ private:
     IRPanasonicAc _panasonicAc2;
     IRCoolixAC _coolixAc1;
     IRCoolixAC _coolixAc2;
-    IRsend _irSendAc1;
-    IRsend _irSendAc2;
     IRsend _irSendProjA;
     IRsend _irSendProjB;
     bool _initialized;
@@ -28,7 +26,6 @@ private:
 
     static uint8_t mapCoolixMode(uint8_t mode);
     static uint8_t mapCoolixFan(uint8_t fanSpeed);
-    static uint64_t buildCoolix48(uint32_t coolix24_raw, uint8_t fRangeCode);
 
 public:
     IRDriver();

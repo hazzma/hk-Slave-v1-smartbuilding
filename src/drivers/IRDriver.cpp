@@ -5,8 +5,6 @@ IRDriver::IRDriver()
       _panasonicAc2(PIN_IR_AC_2),
       _coolixAc1(PIN_IR_AC_1),
       _coolixAc2(PIN_IR_AC_2),
-      _irSendAc1(PIN_IR_AC_1),
-      _irSendAc2(PIN_IR_AC_2),
       _irSendProjA(PIN_IR_PROJECTOR_A), 
       _irSendProjB(PIN_IR_PROJECTOR_B), 
       _initialized(false),
@@ -23,7 +21,6 @@ void IRDriver::begin(bool enableAc1, bool enableAc2, bool enableProjector) {
         _panasonicAc1.setSwingHorizontal(kPanasonicAcSwingHAuto);
 
         _coolixAc1.begin();
-        _irSendAc1.begin();
         _coolixAc1.setFan(kCoolixFanAuto);
         _ac1Initialized = true;
     }
@@ -36,7 +33,6 @@ void IRDriver::begin(bool enableAc1, bool enableAc2, bool enableProjector) {
         _panasonicAc2.setSwingHorizontal(kPanasonicAcSwingHAuto);
 
         _coolixAc2.begin();
-        _irSendAc2.begin();
         _coolixAc2.setFan(kCoolixFanAuto);
         _ac2Initialized = true;
     }
@@ -73,18 +69,7 @@ uint8_t IRDriver::mapCoolixFan(uint8_t fanSpeed) {
     }
 }
 
-uint64_t IRDriver::buildCoolix48(uint32_t coolix24_raw, uint8_t fRangeCode) {
-    uint64_t parity = coolix24_raw ^ 0xFFFFFFFFULL;
-    uint64_t out = 0;
-    out |= ((uint64_t)((coolix24_raw >> 16) & 0xFF)) << 40;
-    out |= ((uint64_t)((parity       >> 16) & 0xFF)) << 32;
-    out |= ((uint64_t)((coolix24_raw >>  8) & 0xFF)) << 24;
-    out |= ((uint64_t)((parity       >>  8) & 0xFF)) << 16;
-    out |= ((uint64_t)( coolix24_raw        & 0xFF)) <<  8;
-    out |=  (parity & 0xFF);
-    out |= ((uint64_t)fRangeCode) << 36;
-    return out;
-}
+
 
 uint8_t IRDriver::mapPanasonicDkeMode(uint8_t mode) {
     switch (mode) {
@@ -234,17 +219,14 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
 
     IRPanasonicAc* panasonicAc = nullptr;
     IRCoolixAC* coolixAc = nullptr;
-    IRsend* irSendAc = nullptr;
     if (channel == 1) {
         if (!_ac1Initialized) return false;
         panasonicAc = &_panasonicAc1;
         coolixAc = &_coolixAc1;
-        irSendAc = &_irSendAc1;
     } else if (channel == 2) {
         if (!_ac2Initialized) return false;
         panasonicAc = &_panasonicAc2;
         coolixAc = &_coolixAc2;
-        irSendAc = &_irSendAc2;
     } else {
         return false;
     }
@@ -261,10 +243,10 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
     }
     panasonicAc->send();
 
-    // 2. Inter-protocol gap (150ms) to ensure clean separation between Panasonic and Coolix IR frames
-    delay(150);
+    // 2. Inter-protocol gap (250ms) to ensure clean separation between Panasonic and Coolix IR frames
+    delay(250);
 
-    // 3. Send Coolix 48-bit IR signal
+    // 3. Send standard 24-bit Coolix IR signal
     coolixAc->stateReset();
     if (power) {
         coolixAc->setPower(true);
@@ -276,8 +258,7 @@ bool IRDriver::sendPanasonicDke(uint8_t channel, bool power, uint16_t tempX10, u
     } else {
         coolixAc->off();
     }
-    uint64_t raw48 = buildCoolix48(coolixAc->getRaw(), 0);
-    irSendAc->sendCoolix48(raw48, 48);
+    coolixAc->send();
 
     return true;
 }
