@@ -5,6 +5,10 @@
 #include "../drivers/IRDriver.h"
 #include "../core/ModuleStatus.h"
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+
 enum IrTarget {
     IR_TARGET_AC1 = 1,
     IR_TARGET_AC2 = 2,
@@ -52,7 +56,20 @@ private:
     bool _stagedPending[2];
     uint32_t _settlingStartMs[2];
 
-    void executeCommand();
+    // FreeRTOS IR task – offloads blocking sendPanasonicDke() so the Modbus
+    // main loop can continue responding during the ~150-200 ms IR transmission.
+    TaskHandle_t _irTaskHandle;
+    SemaphoreHandle_t _irTriggerSem;    // main loop gives → IR task wakes
+    volatile bool _irTaskRunning;       // true while IR task is executing
+    volatile bool _irTaskResultReady;   // task finished, result is valid
+    volatile bool _irTaskSuccess;       // result: true = IR sent OK
+
+    /**
+     * @brief FreeRTOS task body for AC IR transmission.
+     *        Reads _activeCmd, calls driver, writes result flags.
+     */
+    static void irTaskFunction(void* pvParam);
+
     void processProjectorSequence(uint32_t now_ms);
 
 public:
