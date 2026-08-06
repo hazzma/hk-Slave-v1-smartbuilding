@@ -14,25 +14,31 @@ IRDriver::IRDriver()
 
 void IRDriver::begin(bool enableAc1, bool enableAc2, bool enableProjector) {
     if (enableAc1 && !_ac1Initialized) {
+        /*
         _panasonicAc1.begin();
         _panasonicAc1.setModel(kPanasonicDke);
         _panasonicAc1.setFan(kPanasonicAcFanAuto);
         _panasonicAc1.setSwingVertical(kPanasonicAcSwingVAuto);
         _panasonicAc1.setSwingHorizontal(kPanasonicAcSwingHAuto);
+        */
 
         _coolixAc1.begin();
+        _coolixAc1.calibrate();
         _coolixAc1.setFan(kCoolixFanAuto);
         _ac1Initialized = true;
     }
 
     if (enableAc2 && !_ac2Initialized) {
+        /*
         _panasonicAc2.begin();
         _panasonicAc2.setModel(kPanasonicDke);
         _panasonicAc2.setFan(kPanasonicAcFanAuto);
         _panasonicAc2.setSwingVertical(kPanasonicAcSwingVAuto);
         _panasonicAc2.setSwingHorizontal(kPanasonicAcSwingHAuto);
+        */
 
         _coolixAc2.begin();
+        _coolixAc2.calibrate();
         _coolixAc2.setFan(kCoolixFanAuto);
         _ac2Initialized = true;
     }
